@@ -1,0 +1,403 @@
+Arq Planning Phase
+==================
+
+The Planning phase is the second of three phases in Arq. It transforms
+validated understanding into architectural decisions and precise specifications
+before any code is written.
+
+Quick Start
+-----------
+
+* Complete Research phase first
+* Click [Planner] tab
+* Review proposed approaches
+* Select or describe your preferred approach
+* Review and adjust the generated spec
+* Approve to save plan document
+
+Core Principle
+--------------
+
+"Human decides, AI documents."
+
+The Planning phase ensures developers make architectural decisions deliberately.
+AI suggests options and structures the plan, but humans choose the direction.
+
+
+What Happens
+============
+
+The Planning Phase Flow
+-----------------------
+
+1. Research document loads as context
+2. AI analyzes and proposes implementation approaches
+3. User selects approach (or describes custom approach)
+4. AI generates detailed specification
+5. Complexity checker flags potential risks
+6. User reviews and adjusts spec
+7. User approves final plan
+8. plan.yaml saved to .arq/ directory
+
+
+Planning Activities
+-------------------
+
+When you enter the Planning phase, Arq performs:
+
+* Approach Generation
+    - Analyzes research findings
+    - Identifies multiple valid approaches
+    - Evaluates complexity of each option
+    - Recommends based on codebase patterns
+
+* Specification Building
+    - Files to create and modify
+    - Function signatures with types
+    - Data flow between components
+    - Integration points
+
+* Complexity Analysis
+    - Dependency impact assessment
+    - Coupling detection
+    - Pattern conformance checking
+    - Risk flagging
+
+
+User Interface
+==============
+
+Main View
+---------
+
+The Planner tab contains:
+
+* Research document reference (loaded context)
+* Approach options with complexity ratings
+* Custom approach input
+* Generated specification display
+* Complexity warnings
+* Architecture canvas button
+* Adjustment chat input
+* Approve and continue controls
+
+Approach Selection
+------------------
+
+AI presents options based on research:
+
+    Based on your research, here are possible approaches:
+
+    ┌─────────────────────────────────────────────────┐
+    │ ○ Option A: Global Middleware (Recommended)    │
+    │   • Single rate limiter for all routes         │
+    │   • Simple, less code                          │
+    │   • Uses Redis (already available)             │
+    │   Complexity: Low                              │
+    └─────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────┐
+    │ ○ Option B: Per-Route Limiting                 │
+    │   • Different limits per endpoint              │
+    │   • More flexible, more code                   │
+    │   Complexity: Medium                           │
+    └─────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────┐
+    │ ○ Option C: Tiered System                      │
+    │   • Different limits by user tier              │
+    │   • Most flexible, most complex                │
+    │   Complexity: High                             │
+    └─────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────┐
+    │ Or describe your own approach...               │
+    └─────────────────────────────────────────────────┘
+
+Each option shows:
+
+* Clear description of the approach
+* Trade-offs and implications
+* Complexity rating (Low, Medium, High)
+* Recommendation based on codebase patterns
+
+Generated Specification
+-----------------------
+
+After selecting an approach, AI generates detailed spec:
+
+    ┌─────────────────────────────────────────────────┐
+    │ plan-rate-limiting.yaml                        │
+    │                                                 │
+    │ Files to create:                               │
+    │ ┌─────────────────────────────────────────────┐│
+    │ │ src/middleware/rateLimit.ts                 ││
+    │ │                                             ││
+    │ │ export function rateLimiter(                ││
+    │ │   options: RateLimitOpts                    ││
+    │ │ ): RequestHandler                           ││
+    │ │                                             ││
+    │ │ → Returns Express middleware                ││
+    │ │ → Uses Redis for distributed counting       ││
+    │ │ → Returns 429 when limit exceeded           ││
+    │ └─────────────────────────────────────────────┘│
+    │                                                 │
+    │ Files to modify:                               │
+    │ ┌─────────────────────────────────────────────┐│
+    │ │ src/server.ts (line ~23)                    ││
+    │ │                                             ││
+    │ │ + import { rateLimiter } from               ││
+    │ │     './middleware/rateLimit'                ││
+    │ │ + app.use(rateLimiter({                     ││
+    │ │     window: 60,                             ││
+    │ │     max: 100                                ││
+    │ │   }))                                       ││
+    │ └─────────────────────────────────────────────┘│
+    │                                                 │
+    │ [View Architecture Canvas]                     │
+    └─────────────────────────────────────────────────┘
+
+Specification includes:
+
+* Files to create with full signatures
+* Files to modify with line numbers
+* Function signatures with types
+* Brief behavior descriptions
+* Integration points
+
+
+Complexity Checker
+==================
+
+Automatic Analysis
+------------------
+
+Before approval, Arq analyzes the plan:
+
+    Complexity Check:
+
+    ✓ Follows existing middleware pattern
+    ✓ No circular dependencies introduced
+    ⚠ Adds 1 new external dependency (ioredis)
+    ⚠ Modifies shared server.ts file
+
+Warnings explain implications, not block progress.
+
+What It Checks
+--------------
+
+* Dependency Impact: New dependencies added
+* Coupling Analysis: Cross-module connections
+* Pattern Conformance: Matches codebase style
+* File Sensitivity: Changes to critical files
+* Complexity Score: Overall change complexity
+
+The checker helps users make informed decisions, not restrict them.
+
+
+Architecture Canvas
+===================
+
+Visual Planning
+---------------
+
+Click [View Architecture Canvas] to see planned changes visually:
+
+* Current architecture (from Research)
+* Proposed additions highlighted
+* Data flow between components
+* Where new code integrates
+
+Canvas shows the "before and after" of your planned changes.
+
+Interactive Features
+--------------------
+
+* Toggle: Show current vs planned state
+* Highlight: See what's new vs modified
+* Click nodes: See file details
+* Zoom: Navigate complex architectures
+
+
+Adjustment Flow
+===============
+
+Refining the Plan
+-----------------
+
+After seeing the spec, user can adjust:
+
+    Anything you want to change?
+    ┌─────────────────────────────────────────────────┐
+    │ Make the window configurable via env var       │
+    └─────────────────────────────────────────────────┘
+
+    [Update Plan]
+
+Arq updates the specification based on feedback.
+
+Common Adjustments
+------------------
+
+* Change function signatures
+* Add or remove parameters
+* Modify file locations
+* Adjust integration points
+* Add configuration options
+
+The chat allows natural language adjustments without
+manually editing YAML.
+
+
+Validation Flow
+===============
+
+Human Checkpoint
+----------------
+
+The Planning phase checkpoint asks:
+"Is this the right architecture?"
+
+Unlike Research (validating understanding), Planning validates decisions.
+
+If correct:
+    User clicks [Approve & Save]
+    plan.yaml saved to .arq/ directory
+    User can proceed to Agent phase
+
+If changes needed:
+    User types adjustment in chat
+    Arq updates specification
+    Process repeats until satisfied
+
+This is where architectural mistakes are caught - before any code exists.
+
+
+Output Artifacts
+================
+
+Directory Structure
+-------------------
+
+    project/
+    ├── src/
+    ├── .arq/
+    │   └── {task-name}/
+    │       ├── research-doc.md    ← From Research
+    │       └── plan.yaml          ← From Planning
+    └── ...
+
+Plan Document Contents
+----------------------
+
+The generated plan.yaml includes:
+
+    task: rate-limiting
+    approach: global-middleware
+    complexity: low
+
+    create:
+      - path: src/middleware/rateLimit.ts
+        description: Rate limiting middleware
+        exports:
+          - name: rateLimiter
+            signature: "(options: RateLimitOpts) => RequestHandler"
+            behavior:
+              - Returns Express middleware
+              - Uses Redis for counting
+              - Returns 429 when exceeded
+
+    modify:
+      - path: src/server.ts
+        line: 23
+        changes:
+          - type: import
+            content: "import { rateLimiter } from './middleware/rateLimit'"
+          - type: use
+            content: "app.use(rateLimiter({ window: 60, max: 100 }))"
+
+    dependencies:
+      add:
+        - ioredis: "^5.0.0"
+
+    types:
+      - name: RateLimitOpts
+        definition: |
+          interface RateLimitOpts {
+            window: number;
+            max: number;
+            keyPrefix?: string;
+          }
+
+The Plan as Contract
+--------------------
+
+The plan.yaml becomes the contract for the Agent phase:
+
+* Agent only implements what's in the plan
+* Deviations are flagged
+* User approved this exact specification
+* Changes require returning to Planning
+
+
+Relationship to Other Phases
+============================
+
+From Research
+-------------
+
+Planning receives:
+
+* Validated codebase understanding
+* Dependency map
+* Existing patterns identified
+* Context from external sources
+
+Planning builds ON this foundation, not from scratch.
+
+To Agent
+--------
+
+Planning provides:
+
+* Exact files to create/modify
+* Function signatures to implement
+* Types to define
+* Integration points to connect
+
+Agent executes the plan, not explores the problem.
+
+
+Design Philosophy
+=================
+
+Why Explicit Planning
+---------------------
+
+* Prevents scope creep during implementation
+* Catches architectural mistakes early
+* Creates reviewable decision record
+* Separates "what to build" from "building it"
+
+The Spec-Driven Approach
+------------------------
+
+Traditional AI coding:
+    "Add rate limiting" → AI generates code → Hope it's right
+
+Arq approach:
+    "Add rate limiting" → Understand system → Plan architecture →
+    Approve spec → Generate code matching spec
+
+The specification is the checkpoint between human decision
+and AI execution.
+
+Why YAML
+--------
+
+* Human readable and editable
+* Git-diff friendly
+* Parseable by Agent phase
+* Industry standard for configuration
+
+The plan is both documentation and instruction set.
