@@ -155,7 +155,7 @@ Development
 Building from Source
 --------------------
 
-    git clone https://github.com/arq/arq
+    git clone https://github.com/AssahBismarkabah/arq
     cd arq
     cargo build --release
 
