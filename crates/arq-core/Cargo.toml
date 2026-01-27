@@ -1,0 +1,12 @@
+[package]
+name = "arq-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core library for Arq - spec-driven AI coding tool"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+thiserror = "1.0"
+uuid = { version = "1.0", features = ["v4"] }

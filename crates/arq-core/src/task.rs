@@ -1,0 +1,148 @@
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::phase::Phase;
+use crate::research::ResearchDoc;
+use crate::planning::Plan;
+
+/// Represents a single task in Arq.
+///
+/// A task holds the state for one user request, tracking it through
+/// the Research → Planning → Agent workflow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Task {
+    /// Unique identifier for this task
+    pub id: String,
+    /// Human-readable name derived from the prompt
+    pub name: String,
+    /// The original user prompt describing what they want to do
+    pub prompt: String,
+    /// Current phase of the task
+    pub phase: Phase,
+    /// Research document, populated after Research phase completes
+    pub research_doc: Option<ResearchDoc>,
+    /// Plan specification, populated after Planning phase completes
+    pub plan: Option<Plan>,
+}
+
+impl Task {
+    /// Creates a new task with the given prompt.
+    ///
+    /// The task starts in the Research phase.
+    pub fn new(prompt: impl Into<String>) -> Self {
+        let prompt = prompt.into();
+        let name = Self::derive_name(&prompt);
+
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name,
+            prompt,
+            phase: Phase::Research,
+            research_doc: None,
+            plan: None,
+        }
+    }
+
+    /// Derives a task name from the prompt.
+    ///
+    /// Takes the first few words and converts to kebab-case.
+    fn derive_name(prompt: &str) -> String {
+        prompt
+            .split_whitespace()
+            .take(5)
+            .collect::<Vec<_>>()
+            .join("-")
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '-')
+            .collect()
+    }
+
+    /// Attempts to advance to the next phase.
+    ///
+    /// Returns true if advancement was successful, false if already complete
+    /// or if prerequisites are not met.
+    pub fn advance_phase(&mut self) -> bool {
+        if !self.can_advance() {
+            return false;
+        }
+
+        if let Some(next) = self.phase.next() {
+            self.phase = next;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Checks if the task can advance to the next phase.
+    ///
+    /// Each phase has prerequisites:
+    /// - Research → Planning: requires research_doc
+    /// - Planning → Agent: requires plan
+    /// - Agent → Complete: always allowed (completion is handled separately)
+    pub fn can_advance(&self) -> bool {
+        match self.phase {
+            Phase::Research => self.research_doc.is_some(),
+            Phase::Planning => self.plan.is_some(),
+            Phase::Agent => true,
+            Phase::Complete => false,
+        }
+    }
+
+    /// Sets the research document and validates phase.
+    pub fn set_research_doc(&mut self, doc: ResearchDoc) -> Result<(), TaskError> {
+        if self.phase != Phase::Research {
+            return Err(TaskError::WrongPhase {
+                expected: Phase::Research,
+                actual: self.phase,
+            });
+        }
+        self.research_doc = Some(doc);
+        Ok(())
+    }
+
+    /// Sets the plan and validates phase.
+    pub fn set_plan(&mut self, plan: Plan) -> Result<(), TaskError> {
+        if self.phase != Phase::Planning {
+            return Err(TaskError::WrongPhase {
+                expected: Phase::Planning,
+                actual: self.phase,
+            });
+        }
+        self.plan = Some(plan);
+        Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TaskError {
+    #[error("Wrong phase: expected {expected:?}, got {actual:?}")]
+    WrongPhase { expected: Phase, actual: Phase },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_task() {
+        let task = Task::new("Add rate limiting to the API");
+        assert_eq!(task.phase, Phase::Research);
+        assert!(task.research_doc.is_none());
+        assert!(task.plan.is_none());
+        assert!(!task.name.is_empty());
+    }
+
+    #[test]
+    fn test_cannot_advance_without_research_doc() {
+        let task = Task::new("Test task");
+        assert!(!task.can_advance());
+    }
+
+    #[test]
+    fn test_derive_name() {
+        let name = Task::derive_name("Add rate limiting to the API endpoints");
+        assert_eq!(name, "add-rate-limiting-to-the");
+    }
+}

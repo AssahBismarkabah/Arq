@@ -1,0 +1,72 @@
+use serde::{Deserialize, Serialize};
+
+/// Represents the current phase of a task in Arq.
+///
+/// Tasks progress linearly through phases:
+/// Research → Planning → Agent → Complete
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Phase {
+    /// Analyzing codebase, gathering context, validating understanding
+    Research,
+    /// Creating architectural decisions and specifications
+    Planning,
+    /// Executing the approved plan, generating code
+    Agent,
+    /// Task completed successfully
+    Complete,
+}
+
+impl Phase {
+    /// Returns the next phase in the workflow.
+    /// Returns None if already complete.
+    pub fn next(&self) -> Option<Phase> {
+        match self {
+            Phase::Research => Some(Phase::Planning),
+            Phase::Planning => Some(Phase::Agent),
+            Phase::Agent => Some(Phase::Complete),
+            Phase::Complete => None,
+        }
+    }
+
+    /// Returns true if this phase can transition to the next phase.
+    pub fn can_advance(&self) -> bool {
+        self.next().is_some()
+    }
+
+    /// Returns a human-readable name for the phase.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Phase::Research => "Research",
+            Phase::Planning => "Planning",
+            Phase::Agent => "Agent",
+            Phase::Complete => "Complete",
+        }
+    }
+}
+
+impl Default for Phase {
+    fn default() -> Self {
+        Phase::Research
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_phase_progression() {
+        assert_eq!(Phase::Research.next(), Some(Phase::Planning));
+        assert_eq!(Phase::Planning.next(), Some(Phase::Agent));
+        assert_eq!(Phase::Agent.next(), Some(Phase::Complete));
+        assert_eq!(Phase::Complete.next(), None);
+    }
+
+    #[test]
+    fn test_can_advance() {
+        assert!(Phase::Research.can_advance());
+        assert!(Phase::Planning.can_advance());
+        assert!(Phase::Agent.can_advance());
+        assert!(!Phase::Complete.can_advance());
+    }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "arq-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI for Arq - spec-driven AI coding tool"
+
+[[bin]]
+name = "arq"
+path = "src/main.rs"
+
+[dependencies]
+arq-core = { path = "../arq-core" }
+clap = { version = "4.0", features = ["derive"] }
