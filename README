@@ -25,35 +25,6 @@ AI generates code faster than developers can understand it. This creates:
 Arq solves this by enforcing understanding before generation.
 
 
-How It Works
-============
-
-The Workflow
-------------
-
-    1. User enters task: "Add rate limiting to API"
-                    ↓
-    2. Research Phase
-       • Arq analyzes codebase
-       • Finds dependencies and patterns
-       • User validates understanding
-       • Output: research-doc.md
-                    ↓
-    3. Planning Phase
-       • Arq proposes approaches
-       • User selects architecture
-       • Arq generates spec
-       • User approves plan
-       • Output: plan.yaml
-                    ↓
-    4. Agent Phase
-       • Agent implements spec
-       • Conformance checking
-       • User reviews code
-       • Tests run
-       • Output: Applied code
-
-
 Phase Documentation
 ===================
 
