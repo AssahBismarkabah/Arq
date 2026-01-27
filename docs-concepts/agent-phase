@@ -1,0 +1,474 @@
+Arq Agent Phase
+===============
+
+The Agent phase is the third and final phase in Arq. It executes the approved
+plan by generating code that strictly conforms to the specification.
+
+Quick Start
+-----------
+
+* Complete Planning phase first
+* Click [Agent] tab
+* Agent works through plan items
+* Review generated code against spec
+* Accept, regenerate, or edit each piece
+* Run tests to verify
+* Apply changes to codebase
+
+Core Principle
+--------------
+
+"Build exactly what was approved."
+
+The Agent is a disciplined executor, not a creative partner. It implements
+the specification without adding, removing, or changing what was approved.
+
+
+What Happens
+============
+
+The Agent Phase Flow
+--------------------
+
+1. Plan.yaml loads as the contract
+2. Agent works through each item in the plan
+3. For each item: generate code, check conformance
+4. User reviews code against spec (side-by-side)
+5. User accepts, regenerates, or edits manually
+6. Tests run to verify implementation
+7. User approves final changes
+8. Code applied to codebase
+
+
+Agent Activities
+----------------
+
+For each plan item, Agent performs:
+
+* Code Generation
+    - Implements exactly what spec defines
+    - Follows function signatures precisely
+    - Uses specified types and interfaces
+    - Integrates at defined points
+
+* Conformance Checking
+    - Validates output against plan
+    - Flags any deviations
+    - Reports additions not in spec
+    - Reports missing spec requirements
+
+* Test Execution
+    - Runs existing test suite
+    - Checks for type errors
+    - Runs linter
+    - Reports results
+
+
+User Interface
+==============
+
+Main View
+---------
+
+The Agent tab contains:
+
+* Plan reference (loaded contract)
+* Progress checklist through plan items
+* Side-by-side view: Plan vs Generated
+* Conformance status
+* Action buttons per item
+* Test results
+* Final approval controls
+
+Progress Checklist
+------------------
+
+Shows implementation progress:
+
+    Implementation Progress:
+
+    ✓ Create src/middleware/rateLimit.ts
+    ✓ Create src/types/rateLimit.ts
+    ◐ Modify src/server.ts
+    ○ Add dependency: ioredis
+    ○ Run tests
+
+Each item from plan.yaml becomes a trackable step.
+
+Side-by-Side View
+-----------------
+
+For each item, user sees plan vs generated:
+
+    Current: Modify src/server.ts
+
+    ┌─────────────────────────┬─────────────────────────┐
+    │ Plan says:              │ Generated:              │
+    ├─────────────────────────┼─────────────────────────┤
+    │ + import { rateLimiter }│ + import { rateLimiter }│
+    │   from './middleware/   │   from './middleware/   │
+    │   rateLimit'            │   rateLimit';           │
+    │                         │                         │
+    │ + app.use(rateLimiter({ │ + app.use(rateLimiter({ │
+    │     window: 60,         │     window: 60,         │
+    │     max: 100            │     max: 100,           │
+    │   }))                   │   }));                  │
+    │                         │                         │
+    │ Line ~23                │ Line 23 ✓               │
+    └─────────────────────────┴─────────────────────────┘
+
+    Conformance: ✓ Matches spec
+
+This allows direct comparison of intent vs implementation.
+
+Item Actions
+------------
+
+For each generated piece:
+
+* Accept: Approve this item, move to next
+* Regenerate: Try generating again
+* Edit Manually: Open in editor for hand-coding
+* View Full Diff: See changes in file context
+
+
+Conformance Checking
+====================
+
+Automatic Validation
+--------------------
+
+Agent validates its own output against the spec:
+
+    Conformance Check:
+
+    ✓ Function signature matches
+    ✓ Return type correct
+    ✓ File location correct
+    ✓ Integration point correct
+    ✓ No unexpected additions
+
+This is what makes Agent different from other AI coding tools.
+The spec is the contract, and deviations are visible.
+
+What It Checks
+--------------
+
+* Function Signatures: Parameters and return types match
+* File Locations: Code goes where spec says
+* Type Definitions: Interfaces match spec
+* Integration Points: Connections made at specified locations
+* No Extras: Nothing added beyond spec
+* No Missing: All spec items implemented
+
+Deviation Handling
+------------------
+
+When Agent deviates from spec:
+
+    ┌─────────────────────────────────────────────────┐
+    │ ⚠️ Deviation from spec                          │
+    │                                                 │
+    │ Plan says:                                      │
+    │   rateLimiter(options: RateLimitOpts)           │
+    │                                                 │
+    │ Generated:                                      │
+    │   rateLimiter(options: RateLimitOpts,           │
+    │               logger?: Logger)                  │
+    │                                                 │
+    │ Agent added `logger` parameter not in spec.     │
+    │                                                 │
+    │ [Accept deviation]                              │
+    │ [Regenerate without]                            │
+    │ [Back to Planner]                               │
+    └─────────────────────────────────────────────────┘
+
+User controls how to handle:
+
+* Accept deviation: Allow the change
+* Regenerate: Try again without deviation
+* Back to Planner: Update spec to include change
+
+
+Test Execution
+==============
+
+Automatic Testing
+-----------------
+
+After implementation, Agent runs:
+
+* Existing test suite
+* Type checking (TypeScript, etc.)
+* Linter
+* Any configured checks
+
+Test Results Display
+--------------------
+
+    Test Results:
+
+    ┌─────────────────────────────────────────────────┐
+    │ ✓ 23 tests passed                              │
+    │ ✓ No type errors                               │
+    │ ✓ Lint passed                                  │
+    │ ○ 0 tests failed                               │
+    └─────────────────────────────────────────────────┘
+
+If tests fail:
+
+    Test Results:
+
+    ┌─────────────────────────────────────────────────┐
+    │ ✓ 21 tests passed                               │
+    │ ✗ 2 tests failed                                │
+    │                                                 │
+    │ Failed:                                         │
+    │ • rateLimit.test.ts: "should return 429"        │
+    │ • server.test.ts: "middleware order"            │
+    │                                                 │
+    │ [View failures]  [Fix and regenerate]           │
+    └─────────────────────────────────────────────────┘
+
+User can investigate failures and regenerate affected items.
+
+
+Completion Flow
+===============
+
+Implementation Summary
+----------------------
+
+When all items complete:
+
+    Implementation Complete
+
+    ✓ Create src/middleware/rateLimit.ts
+    ✓ Create src/types/rateLimit.ts
+    ✓ Modify src/server.ts
+    ✓ Add dependency: ioredis
+    ✓ All tests passed
+
+    Summary:
+    • 2 files created
+    • 1 file modified
+    • 1 dependency added
+    • All conformance checks passed
+
+    [View All Changes]  [Apply to Codebase]  [Discard]
+
+Final Actions
+-------------
+
+* View All Changes: See complete diff of all changes
+* Apply to Codebase: Write changes to actual files
+* Discard: Cancel without applying
+
+After applying, changes are ready for git commit.
+
+
+Validation Flow
+===============
+
+Human Checkpoint
+----------------
+
+The Agent phase checkpoint asks:
+"Does this code match what I approved?"
+
+Unlike Research (validating understanding) or Planning (validating decisions),
+Agent validates execution conformance.
+
+If correct:
+    User clicks [Apply to Codebase]
+    Changes written to files
+    Ready for commit
+
+If issues found:
+    User regenerates specific items
+    Or edits manually
+    Or returns to Planner to adjust spec
+
+
+Output Artifacts
+================
+
+Applied Changes
+---------------
+
+After approval, Agent applies:
+
+* New files created in specified locations
+* Existing files modified as specified
+* Dependencies added to package.json (or equivalent)
+* Changes ready for git commit
+
+Directory Structure
+-------------------
+
+    project/
+    ├── src/
+    │   ├── middleware/
+    │   │   └── rateLimit.ts      ← Created by Agent
+    │   ├── types/
+    │   │   └── rateLimit.ts      ← Created by Agent
+    │   └── server.ts             ← Modified by Agent
+    ├── .arq/
+    │   └── rate-limiting/
+    │       ├── research-doc.md   ← From Research
+    │       └── plan.yaml         ← From Planning
+    └── package.json              ← Dependency added
+
+Execution Record (Optional)
+---------------------------
+
+Agent can save execution log:
+
+    .arq/
+    └── rate-limiting/
+        ├── research-doc.md
+        ├── plan.yaml
+        └── execution.log
+
+    # execution.log
+    timestamp: 2024-01-15T10:30:00Z
+    items_completed: 4
+    conformance_issues: 0
+    test_results: all_passed
+    deviations_accepted: 0
+
+
+Agent Constraints
+=================
+
+What Agent Does
+---------------
+
+* Implements spec items exactly
+* Generates code matching signatures
+* Integrates at specified points
+* Flags deviations for user review
+* Runs tests to verify
+* Reports conformance status
+
+What Agent Does NOT Do
+----------------------
+
+* Add features not in spec
+* Make architectural decisions
+* Change function signatures
+* Add dependencies not specified
+* Skip conformance checking
+* Hide unexpected changes
+
+The Agent is bound to the plan. This is intentional.
+Creativity happened in Planning. Agent executes.
+
+
+Why Constrained Execution
+=========================
+
+The Problem with Unconstrained AI
+---------------------------------
+
+Traditional AI coding tools:
+
+    User: "Add rate limiting"
+    AI: *generates code*
+    AI: *adds logging it thought was helpful*
+    AI: *refactors nearby code*
+    AI: *changes error handling*
+    User: *surprised by scope*
+
+The result: Code that doesn't match expectations.
+
+The Arq Approach
+----------------
+
+Spec-driven execution:
+
+    User: *approved specific plan*
+    Agent: *implements exactly that plan*
+    Agent: *flags any additions*
+    User: *sees exactly what they approved*
+
+The result: Code that matches expectations.
+
+Trust Through Transparency
+--------------------------
+
+Users trust Agent because:
+
+* They see what Agent is supposed to build (plan)
+* They see what Agent actually built (generated)
+* They see if these match (conformance)
+* They control what gets applied (approval)
+
+No surprises. No hidden changes. No scope creep.
+
+
+Relationship to Other Phases
+============================
+
+From Planning
+-------------
+
+Agent receives:
+
+* Exact files to create/modify
+* Function signatures to implement
+* Types to define
+* Integration points
+* Dependencies to add
+
+Agent implements this contract, nothing more.
+
+The Complete Flow
+-----------------
+
+    Research: "Here's what exists"
+         ↓
+    Planning: "Here's what we'll build"
+         ↓
+    Agent: "Here's the code matching the plan"
+
+Each phase has clear input, output, and human checkpoint.
+
+
+Design Philosophy
+=================
+
+Execution vs Exploration
+------------------------
+
+Most AI coding tools explore the problem space during generation.
+This leads to unpredictable output.
+
+Arq separates exploration (Research) from decision (Planning)
+from execution (Agent). By the time Agent runs, all decisions
+are made.
+
+The Spec as Contract
+--------------------
+
+The plan.yaml is not a suggestion. It's a contract.
+
+* Agent is bound to it
+* Deviations are visible
+* User approved this exact spec
+* Changes require going back to Planning
+
+This creates accountability and predictability.
+
+Human Control
+-------------
+
+At every step, human controls:
+
+* Accept or reject each item
+* Regenerate if needed
+* Edit manually if preferred
+* Return to earlier phases
+* Final approval before applying
+
+AI generates. Human approves. Code applies.

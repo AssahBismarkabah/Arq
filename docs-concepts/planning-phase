@@ -89,29 +89,29 @@ AI presents options based on research:
     Based on your research, here are possible approaches:
 
     ┌─────────────────────────────────────────────────┐
-    │ ○ Option A: Global Middleware (Recommended)    │
-    │   • Single rate limiter for all routes         │
-    │   • Simple, less code                          │
-    │   • Uses Redis (already available)             │
-    │   Complexity: Low                              │
+    │ ○ Option A: Global Middleware (Recommended)     │
+    │   • Single rate limiter for all routes          │
+    │   • Simple, less code                           │
+    │   • Uses Redis (already available)              │
+    │   Complexity: Low                               │
     └─────────────────────────────────────────────────┘
 
     ┌─────────────────────────────────────────────────┐
-    │ ○ Option B: Per-Route Limiting                 │
-    │   • Different limits per endpoint              │
-    │   • More flexible, more code                   │
-    │   Complexity: Medium                           │
+    │ ○ Option B: Per-Route Limiting                  │
+    │   • Different limits per endpoint               │
+    │   • More flexible, more code                    │
+    │   Complexity: Medium                            │
     └─────────────────────────────────────────────────┘
 
     ┌─────────────────────────────────────────────────┐
-    │ ○ Option C: Tiered System                      │
-    │   • Different limits by user tier              │
-    │   • Most flexible, most complex                │
-    │   Complexity: High                             │
+    │ ○ Option C: Tiered System                       │
+    │   • Different limits by user tier               │
+    │   • Most flexible, most complex                 │
+    │   Complexity: High                              │
     └─────────────────────────────────────────────────┘
 
     ┌─────────────────────────────────────────────────┐
-    │ Or describe your own approach...               │
+    │ Or describe your own approach...                │
     └─────────────────────────────────────────────────┘
 
 Each option shows:
@@ -127,34 +127,34 @@ Generated Specification
 After selecting an approach, AI generates detailed spec:
 
     ┌─────────────────────────────────────────────────┐
-    │ plan-rate-limiting.yaml                        │
+    │ plan-rate-limiting.yaml                         │
     │                                                 │
-    │ Files to create:                               │
-    │ ┌─────────────────────────────────────────────┐│
-    │ │ src/middleware/rateLimit.ts                 ││
-    │ │                                             ││
-    │ │ export function rateLimiter(                ││
-    │ │   options: RateLimitOpts                    ││
-    │ │ ): RequestHandler                           ││
-    │ │                                             ││
-    │ │ → Returns Express middleware                ││
-    │ │ → Uses Redis for distributed counting       ││
-    │ │ → Returns 429 when limit exceeded           ││
-    │ └─────────────────────────────────────────────┘│
+    │ Files to create:                                │
+    │ ┌─────────────────────────────────────────────┐ │
+    │ │ src/middleware/rateLimit.ts                 │ │
+    │ │                                             │ │
+    │ │ export function rateLimiter(                │ │
+    │ │   options: RateLimitOpts                    │ │
+    │ │ ): RequestHandler                           │ │
+    │ │                                             │ │
+    │ │ → Returns Express middleware                │ │
+    │ │ → Uses Redis for distributed counting       │ │
+    │ │ → Returns 429 when limit exceeded           │ │
+    │ └─────────────────────────────────────────────┘ │
     │                                                 │
-    │ Files to modify:                               │
-    │ ┌─────────────────────────────────────────────┐│
-    │ │ src/server.ts (line ~23)                    ││
-    │ │                                             ││
-    │ │ + import { rateLimiter } from               ││
-    │ │     './middleware/rateLimit'                ││
-    │ │ + app.use(rateLimiter({                     ││
-    │ │     window: 60,                             ││
-    │ │     max: 100                                ││
-    │ │   }))                                       ││
-    │ └─────────────────────────────────────────────┘│
+    │ Files to modify:                                │
+    │ ┌─────────────────────────────────────────────┐ │
+    │ │ src/server.ts (line ~23)                    │ │
+    │ │                                             │ │
+    │ │ + import { rateLimiter } from               │ │
+    │ │     './middleware/rateLimit'                │ │
+    │ │ + app.use(rateLimiter({                     │ │
+    │ │     window: 60,                             │ │
+    │ │     max: 100                                │ │
+    │ │   }))                                       │ │
+    │ └─────────────────────────────────────────────┘ │
     │                                                 │
-    │ [View Architecture Canvas]                     │
+    │ [View Architecture Canvas]                      │
     └─────────────────────────────────────────────────┘
 
 Specification includes:
@@ -229,7 +229,7 @@ After seeing the spec, user can adjust:
 
     Anything you want to change?
     ┌─────────────────────────────────────────────────┐
-    │ Make the window configurable via env var       │
+    │ Make the window configurable via env var        │
     └─────────────────────────────────────────────────┘
 
     [Update Plan]
