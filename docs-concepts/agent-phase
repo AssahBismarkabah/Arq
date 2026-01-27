@@ -209,10 +209,10 @@ Test Results Display
     Test Results:
 
     ┌─────────────────────────────────────────────────┐
-    │ ✓ 23 tests passed                              │
-    │ ✓ No type errors                               │
-    │ ✓ Lint passed                                  │
-    │ ○ 0 tests failed                               │
+    │ ✓ 23 tests passed                               │
+    │ ✓ No type errors                                │
+    │ ✓ Lint passed                                   │
+    │ ○ 0 tests failed                                │
     └─────────────────────────────────────────────────┘
 
 If tests fail:
