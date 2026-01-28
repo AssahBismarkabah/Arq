@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use arq_core::{FileStorage, TaskManager};
+use arq_core::{
+    ContextBuilder, FileStorage, Phase, Provider, ResearchRunner, TaskManager,
+};
 
 const ARQ_DIR: &str = ".arq";
 
@@ -33,16 +35,21 @@ enum Commands {
         /// Task ID to switch to
         id: String,
     },
+    /// Run research phase for current task
+    Research,
+    /// Advance to the next phase
+    Advance,
 }
 
-fn main() {
-    if let Err(e) = run() {
+#[tokio::main]
+async fn main() {
+    if let Err(e) = run().await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let storage = FileStorage::new(ARQ_DIR);
     let mut manager = TaskManager::new(storage);
@@ -56,6 +63,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("  Phase: {}", task.phase.display_name());
             println!("  Prompt: {}", task.prompt);
             println!("\nTask saved to {}/tasks/{}/", ARQ_DIR, task.id);
+            println!("\nNext: Run 'arq research' to analyze the codebase.");
         }
         Commands::Status => {
             match manager.get_current_task()? {
@@ -72,6 +80,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     if task.plan.is_some() {
                         println!("  Plan: Complete");
+                    }
+
+                    // Show next action
+                    match task.phase {
+                        Phase::Research => {
+                            if task.research_doc.is_some() {
+                                println!("\nNext: Run 'arq advance' to move to Planning phase.");
+                            } else {
+                                println!("\nNext: Run 'arq research' to analyze the codebase.");
+                            }
+                        }
+                        Phase::Planning => {
+                            println!("\nNext: Planning phase (coming soon).");
+                        }
+                        Phase::Agent => {
+                            println!("\nNext: Agent phase (coming soon).");
+                        }
+                        Phase::Complete => {
+                            println!("\nTask complete!");
+                        }
                     }
                 }
                 None => {
@@ -96,7 +124,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::Delete { id } => {
-            // Try to find task by partial ID
             let tasks = manager.list_tasks()?;
             let matching: Vec<_> = tasks.iter().filter(|t| t.id.starts_with(&id)).collect();
 
@@ -118,7 +145,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         Commands::Switch { id } => {
-            // Try to find task by partial ID
             let tasks = manager.list_tasks()?;
             let matching: Vec<_> = tasks.iter().filter(|t| t.id.starts_with(&id)).collect();
 
@@ -138,6 +164,85 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+        }
+        Commands::Research => {
+            let task = manager
+                .get_current_task()?
+                .ok_or("No current task. Use 'arq new <prompt>' first.")?;
+
+            if task.phase != Phase::Research {
+                return Err(format!(
+                    "Task is in {} phase, not Research phase.",
+                    task.phase.display_name()
+                )
+                .into());
+            }
+
+            if task.research_doc.is_some() {
+                println!("Research already complete for this task.");
+                println!("Run 'arq advance' to move to Planning phase.");
+                return Ok(());
+            }
+
+            println!("Starting research for: {}", task.prompt);
+            println!();
+
+            // Create LLM client (auto-detects provider from environment)
+            let llm = Provider::from_env().map_err(|e| {
+                format!(
+                    "{}. Set ARQ_LLM_API_KEY or OPENAI_API_KEY or ANTHROPIC_API_KEY.",
+                    e
+                )
+            })?;
+
+            // Create context builder (current directory)
+            let context_builder = ContextBuilder::new(".");
+
+            // Create runner
+            let runner = ResearchRunner::new(llm, context_builder);
+
+            println!("Scanning codebase...");
+
+            // Run research
+            let doc = runner.run(&task).await?;
+
+            println!("Research complete!\n");
+            println!("## Summary\n");
+            println!("{}\n", doc.summary);
+            println!("## Suggested Approach\n");
+            println!("{}\n", doc.suggested_approach);
+
+            // Save research doc
+            manager.set_research_doc(&task.id, doc)?;
+
+            println!("Research saved to {}/tasks/{}/research-doc.md", ARQ_DIR, task.id);
+            println!("\nNext: Run 'arq advance' to move to Planning phase.");
+        }
+        Commands::Advance => {
+            let task = manager
+                .get_current_task()?
+                .ok_or("No current task. Use 'arq new <prompt>' first.")?;
+
+            if !task.can_advance() {
+                let hint = match task.phase {
+                    Phase::Research => "Run 'arq research' first.",
+                    Phase::Planning => "Complete planning first.",
+                    Phase::Agent => "Complete implementation first.",
+                    Phase::Complete => "Task is already complete.",
+                };
+                return Err(format!(
+                    "Cannot advance from {} phase. {}",
+                    task.phase.display_name(),
+                    hint
+                )
+                .into());
+            }
+
+            let new_phase = manager.advance_phase(&task.id)?;
+            println!(
+                "Advanced to {} phase.",
+                new_phase.display_name()
+            );
         }
     }
 
