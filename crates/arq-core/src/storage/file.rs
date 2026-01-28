@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::config::{StorageConfig, DEFAULT_CURRENT_FILE};
 use crate::planning::Plan;
 use crate::research::ResearchDoc;
 use crate::task::{Task, TaskSummary};
@@ -22,19 +23,29 @@ use super::Storage;
 /// ```
 pub struct FileStorage {
     base_path: PathBuf,
+    config: StorageConfig,
 }
 
 impl FileStorage {
-    /// Creates a new FileStorage with the given base path.
+    /// Creates a new FileStorage with the given base path and default config.
     pub fn new(base_path: impl Into<PathBuf>) -> Self {
         Self {
             base_path: base_path.into(),
+            config: StorageConfig::default(),
+        }
+    }
+
+    /// Creates a new FileStorage with custom configuration.
+    pub fn with_config(config: StorageConfig) -> Self {
+        Self {
+            base_path: PathBuf::from(&config.data_dir),
+            config,
         }
     }
 
     /// Returns the path to the tasks directory.
     fn tasks_dir(&self) -> PathBuf {
-        self.base_path.join("tasks")
+        self.base_path.join(&self.config.tasks_dir)
     }
 
     /// Returns the path to a specific task's directory.
@@ -44,22 +55,22 @@ impl FileStorage {
 
     /// Returns the path to a task's metadata file.
     fn task_file(&self, id: &str) -> PathBuf {
-        self.task_dir(id).join("task.json")
+        self.task_dir(id).join(&self.config.task_file)
     }
 
     /// Returns the path to a task's research document.
     fn research_doc_file(&self, id: &str) -> PathBuf {
-        self.task_dir(id).join("research-doc.md")
+        self.task_dir(id).join(&self.config.research_file)
     }
 
     /// Returns the path to a task's plan file.
     fn plan_file(&self, id: &str) -> PathBuf {
-        self.task_dir(id).join("plan.yaml")
+        self.task_dir(id).join(&self.config.plan_file)
     }
 
     /// Returns the path to the current task marker file.
     fn current_file(&self) -> PathBuf {
-        self.base_path.join("current")
+        self.base_path.join(DEFAULT_CURRENT_FILE)
     }
 
     /// Ensures the tasks directory exists.
@@ -280,5 +291,25 @@ mod tests {
 
         storage.set_current_task_id(None).unwrap();
         assert!(storage.get_current_task_id().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_custom_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = StorageConfig {
+            data_dir: temp_dir.path().to_string_lossy().to_string(),
+            tasks_dir: "my-tasks".to_string(),
+            task_file: "metadata.json".to_string(),
+            research_file: "research.md".to_string(),
+            plan_file: "implementation.yaml".to_string(),
+        };
+
+        let storage = FileStorage::with_config(config);
+        let task = Task::new("Custom config task");
+        storage.save_task(&task).unwrap();
+
+        // Verify custom path is used
+        let custom_path = temp_dir.path().join("my-tasks").join(&task.id).join("metadata.json");
+        assert!(custom_path.exists());
     }
 }

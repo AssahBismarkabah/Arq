@@ -8,10 +8,13 @@ Planning, and Implementation.
 Quick Start
 -----------
 
-* Install Arq extension in your IDE
-* Click [Arq] tab to open workspace
-* Enter what you want to build
-* Research → Plan → Implement
+    # Set your LLM provider
+    export OPENAI_API_KEY="sk-..."  # or ANTHROPIC_API_KEY or OLLAMA_HOST
+
+    # Create and run a task
+    arq new "Add user authentication"
+    arq research
+    arq status
 
 The Problem
 -----------
@@ -66,24 +69,13 @@ Conformance checking validates execution matches plan.
 Installation
 ============
 
-VS Code
--------
+    cargo install --path crates/arq-cli
 
-    1. Install Arq extension from marketplace
-    2. [Arq] tab appears alongside [Editor]
-    3. Click to open Arq workspace
+Or build from source:
 
-IntelliJ / JetBrains
---------------------
-
-    1. Install Arq plugin
-    2. Arq icon appears in sidebar
-    3. Click to open Arq workspace
-
-Other IDEs
-----------
-
-Arq adapts to native IDE patterns while providing the same experience.
+    git clone https://github.com/AssahBismarkabah/arq
+    cd arq
+    cargo build --release
 
 
 Project Structure
@@ -94,10 +86,11 @@ When using Arq, artifacts are saved in .arq/ directory:
     project/
     ├── src/
     ├── .arq/
-    │   └── {task-name}/
-    │       ├── research-doc.md    ← Research findings
-    │       └── plan.yaml          ← Approved specification
-    └── ...
+    │   └── tasks/{task-id}/
+    │       ├── task.json         ← Task metadata
+    │       ├── research-doc.md   ← Research findings
+    │       └── plan.yaml         ← Approved specification
+    └── arq.toml                  ← Configuration (optional)
 
 These files are git-tracked, creating an audit trail of decisions.
 
@@ -105,19 +98,20 @@ These files are git-tracked, creating an audit trail of decisions.
 Configuration
 =============
 
-Arq configuration in .arq/config.yaml:
+Arq configuration in arq.toml:
 
-    llm:
-      provider: claude          # claude, openai, local
-      model: claude-sonnet-4    # model to use
+    [context]
+    max_file_size = 102400
+    include_extensions = ["rs", "ts", "py", "go"]
+    exclude_dirs = ["node_modules", "target", ".git"]
 
-    integrations:
-      slack: false              # enable slack context
-      confluence: false         # enable confluence context
+    [llm]
+    provider = "openai"       # openai, anthropic, ollama
+    model = "gpt-4o"
+    max_tokens = 4096
 
-    testing:
-      auto_run: true            # run tests after implementation
-      command: "npm test"       # test command
+    [storage]
+    data_dir = ".arq"
 
 
 Development

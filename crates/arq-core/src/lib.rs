@@ -1,3 +1,4 @@
+pub mod config;
 pub mod phase;
 pub mod task;
 pub mod research;
@@ -8,6 +9,7 @@ pub mod manager;
 pub mod llm;
 pub mod context;
 
+pub use config::{Config, ConfigError, ContextConfig, LLMConfig, StorageConfig, ResearchConfig};
 pub use phase::Phase;
 pub use task::{Task, TaskSummary, TaskError};
 pub use research::{ResearchDoc, ResearchRunner, ResearchError};

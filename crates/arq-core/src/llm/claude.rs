@@ -2,15 +2,17 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+use crate::config::{
+    DEFAULT_ANTHROPIC_API_VERSION, DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_ANTHROPIC_URL, DEFAULT_MAX_TOKENS,
+};
 use super::{LLMError, LLM};
-
-const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
-const DEFAULT_MAX_TOKENS: u32 = 4096;
 
 /// Claude API client.
 pub struct ClaudeClient {
     api_key: String,
+    api_url: String,
+    api_version: String,
     model: String,
     max_tokens: u32,
     client: Client,
@@ -21,7 +23,9 @@ impl ClaudeClient {
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
             api_key: api_key.into(),
-            model: DEFAULT_MODEL.to_string(),
+            api_url: DEFAULT_ANTHROPIC_URL.to_string(),
+            api_version: DEFAULT_ANTHROPIC_API_VERSION.to_string(),
+            model: DEFAULT_ANTHROPIC_MODEL.to_string(),
             max_tokens: DEFAULT_MAX_TOKENS,
             client: Client::new(),
         }
@@ -46,12 +50,24 @@ impl ClaudeClient {
         self
     }
 
+    /// Sets the API URL (for proxies or enterprise deployments).
+    pub fn with_api_url(mut self, url: impl Into<String>) -> Self {
+        self.api_url = url.into();
+        self
+    }
+
+    /// Sets the API version.
+    pub fn with_api_version(mut self, version: impl Into<String>) -> Self {
+        self.api_version = version.into();
+        self
+    }
+
     async fn send_request(&self, request: &ClaudeRequest) -> Result<String, LLMError> {
         let response = self
             .client
-            .post(ANTHROPIC_API_URL)
+            .post(&self.api_url)
             .header("x-api-key", &self.api_key)
-            .header("anthropic-version", "2023-06-01")
+            .header("anthropic-version", &self.api_version)
             .header("content-type", "application/json")
             .json(request)
             .send()
@@ -164,14 +180,23 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = ClaudeClient::new("test-key");
-        assert_eq!(client.model, DEFAULT_MODEL);
+        assert_eq!(client.model, DEFAULT_ANTHROPIC_MODEL);
         assert_eq!(client.max_tokens, DEFAULT_MAX_TOKENS);
+        assert_eq!(client.api_url, DEFAULT_ANTHROPIC_URL);
+        assert_eq!(client.api_version, DEFAULT_ANTHROPIC_API_VERSION);
     }
 
     #[test]
     fn test_client_with_model() {
         let client = ClaudeClient::new("test-key").with_model("claude-3-opus");
         assert_eq!(client.model, "claude-3-opus");
+    }
+
+    #[test]
+    fn test_client_with_api_url() {
+        let client = ClaudeClient::new("test-key")
+            .with_api_url("https://proxy.example.com/v1/messages");
+        assert_eq!(client.api_url, "https://proxy.example.com/v1/messages");
     }
 
     #[test]

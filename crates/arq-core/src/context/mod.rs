@@ -3,36 +3,53 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use ignore::WalkBuilder;
 
-/// Maximum file size to include in context (100KB)
-const MAX_FILE_SIZE: u64 = 100 * 1024;
-
-/// Maximum total context size (500KB)
-const MAX_TOTAL_SIZE: u64 = 500 * 1024;
-
-/// File extensions to include
-const INCLUDED_EXTENSIONS: &[&str] = &[
-    "rs", "ts", "js", "tsx", "jsx", "py", "go", "java", "kt", "swift",
-    "c", "cpp", "h", "hpp", "cs", "rb", "php", "vue", "svelte",
-    "json", "yaml", "yml", "toml", "md", "txt",
-];
-
-/// Directories to always exclude
-const EXCLUDED_DIRS: &[&str] = &[
-    "node_modules", "target", "dist", "build", ".git", "__pycache__",
-    "venv", ".venv", "vendor", ".next", ".nuxt",
-];
+use crate::config::ContextConfig;
 
 /// Builds context from a codebase for LLM analysis.
 pub struct ContextBuilder {
     root_path: PathBuf,
+    config: ContextConfig,
 }
 
 impl ContextBuilder {
-    /// Creates a new context builder rooted at the given path.
+    /// Creates a new context builder rooted at the given path with default config.
     pub fn new(root_path: impl Into<PathBuf>) -> Self {
         Self {
             root_path: root_path.into(),
+            config: ContextConfig::default(),
         }
+    }
+
+    /// Creates a new context builder with custom configuration.
+    pub fn with_config(root_path: impl Into<PathBuf>, config: ContextConfig) -> Self {
+        Self {
+            root_path: root_path.into(),
+            config,
+        }
+    }
+
+    /// Sets the maximum file size.
+    pub fn max_file_size(mut self, size: u64) -> Self {
+        self.config.max_file_size = size;
+        self
+    }
+
+    /// Sets the maximum total context size.
+    pub fn max_total_size(mut self, size: u64) -> Self {
+        self.config.max_total_size = size;
+        self
+    }
+
+    /// Adds an extension to include.
+    pub fn include_extension(mut self, ext: impl Into<String>) -> Self {
+        self.config.include_extensions.push(ext.into());
+        self
+    }
+
+    /// Adds a directory to exclude.
+    pub fn exclude_dir(mut self, dir: impl Into<String>) -> Self {
+        self.config.exclude_dirs.push(dir.into());
+        self
     }
 
     /// Gathers context from the codebase.
@@ -56,12 +73,14 @@ impl ContextBuilder {
         prefix: &str,
         tree: &mut String,
     ) -> Result<(), ContextError> {
+        let exclude_dirs = &self.config.exclude_dirs;
+
         let entries: Vec<_> = fs::read_dir(path)
             .map_err(|e| ContextError::IoError(path.to_path_buf(), e.to_string()))?
             .filter_map(|e| e.ok())
             .filter(|e| {
                 let name = e.file_name().to_string_lossy().to_string();
-                !name.starts_with('.') && !EXCLUDED_DIRS.contains(&name.as_str())
+                !name.starts_with('.') && !exclude_dirs.contains(&name)
             })
             .collect();
 
@@ -122,13 +141,13 @@ impl ContextBuilder {
                 .and_then(|e| e.to_str())
                 .unwrap_or("");
 
-            if !INCLUDED_EXTENSIONS.contains(&extension) {
+            if !self.config.include_extensions.iter().any(|e| e == extension) {
                 continue;
             }
 
             // Check if in excluded directory
             let path_str = path.to_string_lossy();
-            if EXCLUDED_DIRS.iter().any(|d| path_str.contains(d)) {
+            if self.config.exclude_dirs.iter().any(|d| path_str.contains(d.as_str())) {
                 continue;
             }
 
@@ -136,12 +155,12 @@ impl ContextBuilder {
             let metadata = fs::metadata(path)
                 .map_err(|e| ContextError::IoError(path.to_path_buf(), e.to_string()))?;
 
-            if metadata.len() > MAX_FILE_SIZE {
+            if metadata.len() > self.config.max_file_size {
                 continue;
             }
 
             // Check total size limit
-            if total_size + metadata.len() > MAX_TOTAL_SIZE {
+            if total_size + metadata.len() > self.config.max_total_size {
                 break;
             }
 
@@ -256,5 +275,28 @@ mod tests {
         // Should include index.js but not node_modules/test.js
         assert!(context.files.iter().any(|f| f.path == "index.js"));
         assert!(!context.files.iter().any(|f| f.path.contains("node_modules")));
+    }
+
+    #[test]
+    fn test_custom_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // Create test files
+        let mut file = File::create(root.join("test.rs")).unwrap();
+        writeln!(file, "fn main() {{}}").unwrap();
+
+        let mut file = File::create(root.join("test.custom")).unwrap();
+        writeln!(file, "custom content").unwrap();
+
+        // Default config should not include .custom files
+        let builder = ContextBuilder::new(root);
+        let context = builder.gather().unwrap();
+        assert!(!context.files.iter().any(|f| f.path.ends_with(".custom")));
+
+        // Custom config with .custom extension should include it
+        let builder = ContextBuilder::new(root).include_extension("custom");
+        let context = builder.gather().unwrap();
+        assert!(context.files.iter().any(|f| f.path.ends_with(".custom")));
     }
 }

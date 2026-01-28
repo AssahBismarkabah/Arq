@@ -2,9 +2,11 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+use crate::config::{
+    DEFAULT_MAX_TOKENS, DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_MODEL,
+    DEFAULT_OPENAI_URL, DEFAULT_OPENROUTER_URL,
+};
 use super::{LLMError, LLM};
-
-const DEFAULT_MAX_TOKENS: u32 = 4096;
 
 /// OpenAI-compatible API client.
 ///
@@ -50,7 +52,7 @@ impl OpenAIClient {
 
     /// Creates a client for OpenAI.
     pub fn openai(api_key: impl Into<String>, model: impl Into<String>) -> Self {
-        Self::new("https://api.openai.com/v1", api_key, model)
+        Self::new(DEFAULT_OPENAI_URL, api_key, model)
     }
 
     /// Creates a client for OpenAI from environment variables.
@@ -59,31 +61,31 @@ impl OpenAIClient {
         let api_key = std::env::var("OPENAI_API_KEY")
             .map_err(|_| LLMError::MissingApiKey)?;
         let model = std::env::var("OPENAI_MODEL")
-            .unwrap_or_else(|_| "gpt-4o".to_string());
+            .unwrap_or_else(|_| DEFAULT_OPENAI_MODEL.to_string());
         Ok(Self::openai(api_key, model))
     }
 
     /// Creates a client for Ollama (local).
     pub fn ollama(model: impl Into<String>) -> Self {
-        Self::new("http://localhost:11434/v1", "", model)
+        Self::new(DEFAULT_OLLAMA_URL, "", model)
     }
 
     /// Creates a client for OpenRouter.
     pub fn openrouter(api_key: impl Into<String>, model: impl Into<String>) -> Self {
-        Self::new("https://openrouter.ai/api/v1", api_key, model)
+        Self::new(DEFAULT_OPENROUTER_URL, api_key, model)
     }
 
     /// Creates a client from environment variables.
     /// Uses ARQ_LLM_BASE_URL, ARQ_LLM_API_KEY, and ARQ_LLM_MODEL.
     pub fn from_env() -> Result<Self, LLMError> {
         let base_url = std::env::var("ARQ_LLM_BASE_URL")
-            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+            .unwrap_or_else(|_| DEFAULT_OPENAI_URL.to_string());
         let api_key = std::env::var("ARQ_LLM_API_KEY")
             .or_else(|_| std::env::var("OPENAI_API_KEY"))
             .unwrap_or_default();
         let model = std::env::var("ARQ_LLM_MODEL")
             .or_else(|_| std::env::var("OPENAI_MODEL"))
-            .unwrap_or_else(|_| "gpt-4o".to_string());
+            .unwrap_or_else(|_| DEFAULT_OPENAI_MODEL.to_string());
 
         Ok(Self::new(base_url, api_key, model))
     }
@@ -219,19 +221,20 @@ mod tests {
         );
         assert_eq!(client.base_url, "https://api.example.com/v1");
         assert_eq!(client.model, "gpt-4");
+        assert_eq!(client.max_tokens, DEFAULT_MAX_TOKENS);
     }
 
     #[test]
     fn test_openai_client() {
         let client = OpenAIClient::openai("test-key", "gpt-4o");
-        assert_eq!(client.base_url, "https://api.openai.com/v1");
+        assert_eq!(client.base_url, DEFAULT_OPENAI_URL);
         assert_eq!(client.model, "gpt-4o");
     }
 
     #[test]
     fn test_ollama_client() {
         let client = OpenAIClient::ollama("llama3");
-        assert_eq!(client.base_url, "http://localhost:11434/v1");
+        assert_eq!(client.base_url, DEFAULT_OLLAMA_URL);
         assert_eq!(client.model, "llama3");
         assert!(client.api_key.is_empty());
     }
@@ -239,7 +242,7 @@ mod tests {
     #[test]
     fn test_openrouter_client() {
         let client = OpenAIClient::openrouter("test-key", "anthropic/claude-3-opus");
-        assert_eq!(client.base_url, "https://openrouter.ai/api/v1");
+        assert_eq!(client.base_url, DEFAULT_OPENROUTER_URL);
         assert_eq!(client.model, "anthropic/claude-3-opus");
     }
 

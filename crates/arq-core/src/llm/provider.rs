@@ -1,3 +1,9 @@
+use crate::config::{
+    LLMConfig,
+    DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL,
+    DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_URL,
+};
 use super::{ClaudeClient, LLMError, OpenAIClient, LLM};
 
 /// LLM Provider configuration.
@@ -32,6 +38,25 @@ impl Default for Provider {
 }
 
 impl Provider {
+    /// Creates a provider from LLMConfig.
+    pub fn from_config(config: &LLMConfig) -> Self {
+        match config.provider.as_str() {
+            "anthropic" | "claude" => Provider::Anthropic {
+                api_key: config.api_key.clone(),
+                model: config.model.clone(),
+            },
+            "ollama" => Provider::Ollama {
+                base_url: config.base_url.clone(),
+                model: config.model.clone().unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string()),
+            },
+            _ => Provider::OpenAI {
+                base_url: config.base_url.clone(),
+                api_key: config.api_key.clone(),
+                model: config.model.clone(),
+            },
+        }
+    }
+
     /// Creates an LLM client from the provider configuration.
     pub fn build(self) -> Result<Box<dyn LLM>, LLMError> {
         match self {
@@ -39,7 +64,7 @@ impl Provider {
                 let base = base_url
                     .or_else(|| std::env::var("ARQ_LLM_BASE_URL").ok())
                     .or_else(|| std::env::var("OPENAI_BASE_URL").ok())
-                    .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+                    .unwrap_or_else(|| DEFAULT_OPENAI_URL.to_string());
 
                 let key = api_key
                     .or_else(|| std::env::var("ARQ_LLM_API_KEY").ok())
@@ -49,7 +74,7 @@ impl Provider {
                 let mdl = model
                     .or_else(|| std::env::var("ARQ_LLM_MODEL").ok())
                     .or_else(|| std::env::var("OPENAI_MODEL").ok())
-                    .unwrap_or_else(|| "gpt-4o".to_string());
+                    .unwrap_or_else(|| DEFAULT_OPENAI_MODEL.to_string());
 
                 Ok(Box::new(OpenAIClient::new(base, key, mdl)))
             }
@@ -61,7 +86,7 @@ impl Provider {
 
                 let mdl = model
                     .or_else(|| std::env::var("ANTHROPIC_MODEL").ok())
-                    .unwrap_or_else(|| "claude-sonnet-4-20250514".to_string());
+                    .unwrap_or_else(|| DEFAULT_ANTHROPIC_MODEL.to_string());
 
                 Ok(Box::new(ClaudeClient::new(key).with_model(mdl)))
             }
@@ -70,7 +95,7 @@ impl Provider {
                 let base = base_url
                     .or_else(|| std::env::var("OLLAMA_HOST").ok())
                     .map(|h| format!("{}/v1", h.trim_end_matches('/')))
-                    .unwrap_or_else(|| "http://localhost:11434/v1".to_string());
+                    .unwrap_or_else(|| DEFAULT_OLLAMA_URL.to_string());
 
                 Ok(Box::new(OpenAIClient::new(base, "", model)))
             }
@@ -102,7 +127,7 @@ impl Provider {
                 "ollama" => {
                     let model = std::env::var("ARQ_LLM_MODEL")
                         .or_else(|_| std::env::var("OLLAMA_MODEL"))
-                        .unwrap_or_else(|_| "llama3".to_string());
+                        .unwrap_or_else(|_| DEFAULT_OLLAMA_MODEL.to_string());
                     Provider::Ollama {
                         base_url: None,
                         model,
@@ -139,7 +164,7 @@ impl Provider {
         if std::env::var("OLLAMA_HOST").is_ok() {
             let model = std::env::var("ARQ_LLM_MODEL")
                 .or_else(|_| std::env::var("OLLAMA_MODEL"))
-                .unwrap_or_else(|_| "llama3".to_string());
+                .unwrap_or_else(|_| DEFAULT_OLLAMA_MODEL.to_string());
             return Provider::Ollama {
                 base_url: None,
                 model,
@@ -169,7 +194,7 @@ mod tests {
     fn test_ollama_provider_build() {
         let provider = Provider::Ollama {
             base_url: None,
-            model: "llama3".to_string(),
+            model: DEFAULT_OLLAMA_MODEL.to_string(),
         };
         // Should succeed without API key
         let result = provider.build();
@@ -185,5 +210,20 @@ mod tests {
         };
         let result = provider.build();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_from_config() {
+        let config = LLMConfig {
+            provider: "ollama".to_string(),
+            model: Some("codellama".to_string()),
+            base_url: None,
+            api_key: None,
+            max_tokens: 4096,
+            api_version: None,
+        };
+
+        let provider = Provider::from_config(&config);
+        assert!(matches!(provider, Provider::Ollama { model, .. } if model == "codellama"));
     }
 }

@@ -1,35 +1,15 @@
-/// System prompt for the research phase.
-pub const RESEARCH_SYSTEM_PROMPT: &str = r#"You are a code analyst helping a developer understand a codebase before making changes.
+use crate::config::DEFAULT_RESEARCH_SYSTEM_PROMPT;
 
-Your task is to analyze the provided codebase and create a research document that will help the developer understand:
-1. The relevant parts of the codebase for their task
-2. Dependencies and relationships between components
-3. Existing patterns and conventions used
-4. A suggested approach for implementing the task
-
-Be thorough but concise. Focus on what's relevant to the task at hand.
-
-IMPORTANT: Output your analysis as valid JSON matching this exact structure:
-{
-  "summary": "A 2-3 sentence summary of your findings",
-  "findings": [
-    {
-      "title": "Finding title",
-      "description": "Detailed description of the finding",
-      "related_files": ["path/to/file1.rs", "path/to/file2.rs"]
-    }
-  ],
-  "dependencies": [
-    {
-      "name": "Dependency name",
-      "description": "What it does and why it's relevant",
-      "is_external": true
-    }
-  ],
-  "suggested_approach": "A clear, actionable description of how to implement the task"
+/// Gets the system prompt for the research phase.
+///
+/// If a custom prompt is provided, uses that. Otherwise uses the default.
+pub fn get_research_system_prompt(custom: Option<&str>) -> &str {
+    custom.unwrap_or(DEFAULT_RESEARCH_SYSTEM_PROMPT)
 }
 
-Only output the JSON, no additional text."#;
+/// System prompt for the research phase (default).
+/// Kept for backwards compatibility - prefer using get_research_system_prompt().
+pub const RESEARCH_SYSTEM_PROMPT: &str = DEFAULT_RESEARCH_SYSTEM_PROMPT;
 
 /// Builds the user prompt for research.
 pub fn build_research_prompt(task_prompt: &str, context: &str) -> String {
