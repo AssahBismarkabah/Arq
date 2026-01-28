@@ -1,9 +1,10 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::phase::Phase;
-use crate::research::ResearchDoc;
 use crate::planning::Plan;
+use crate::research::ResearchDoc;
 
 /// Represents a single task in Arq.
 ///
@@ -19,6 +20,10 @@ pub struct Task {
     pub prompt: String,
     /// Current phase of the task
     pub phase: Phase,
+    /// When the task was created
+    pub created_at: DateTime<Utc>,
+    /// When the task was last updated
+    pub updated_at: DateTime<Utc>,
     /// Research document, populated after Research phase completes
     pub research_doc: Option<ResearchDoc>,
     /// Plan specification, populated after Planning phase completes
@@ -32,12 +37,15 @@ impl Task {
     pub fn new(prompt: impl Into<String>) -> Self {
         let prompt = prompt.into();
         let name = Self::derive_name(&prompt);
+        let now = Utc::now();
 
         Self {
             id: Uuid::new_v4().to_string(),
             name,
             prompt,
             phase: Phase::Research,
+            created_at: now,
+            updated_at: now,
             research_doc: None,
             plan: None,
         }
@@ -69,6 +77,7 @@ impl Task {
 
         if let Some(next) = self.phase.next() {
             self.phase = next;
+            self.updated_at = Utc::now();
             true
         } else {
             false
@@ -99,6 +108,7 @@ impl Task {
             });
         }
         self.research_doc = Some(doc);
+        self.updated_at = Utc::now();
         Ok(())
     }
 
@@ -111,8 +121,30 @@ impl Task {
             });
         }
         self.plan = Some(plan);
+        self.updated_at = Utc::now();
         Ok(())
     }
+
+    /// Converts the task to a summary (for listings).
+    pub fn to_summary(&self) -> TaskSummary {
+        TaskSummary {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            phase: self.phase,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        }
+    }
+}
+
+/// A lightweight summary of a task for listings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSummary {
+    pub id: String,
+    pub name: String,
+    pub phase: Phase,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -132,6 +164,7 @@ mod tests {
         assert!(task.research_doc.is_none());
         assert!(task.plan.is_none());
         assert!(!task.name.is_empty());
+        assert!(task.created_at <= Utc::now());
     }
 
     #[test]
@@ -144,5 +177,14 @@ mod tests {
     fn test_derive_name() {
         let name = Task::derive_name("Add rate limiting to the API endpoints");
         assert_eq!(name, "add-rate-limiting-to-the");
+    }
+
+    #[test]
+    fn test_to_summary() {
+        let task = Task::new("Test task");
+        let summary = task.to_summary();
+        assert_eq!(summary.id, task.id);
+        assert_eq!(summary.name, task.name);
+        assert_eq!(summary.phase, task.phase);
     }
 }
