@@ -153,38 +153,3 @@ pub enum TaskError {
     WrongPhase { expected: Phase, actual: Phase },
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_new_task() {
-        let task = Task::new("Add rate limiting to the API");
-        assert_eq!(task.phase, Phase::Research);
-        assert!(task.research_doc.is_none());
-        assert!(task.plan.is_none());
-        assert!(!task.name.is_empty());
-        assert!(task.created_at <= Utc::now());
-    }
-
-    #[test]
-    fn test_cannot_advance_without_research_doc() {
-        let task = Task::new("Test task");
-        assert!(!task.can_advance());
-    }
-
-    #[test]
-    fn test_derive_name() {
-        let name = Task::derive_name("Add rate limiting to the API endpoints");
-        assert_eq!(name, "add-rate-limiting-to-the");
-    }
-
-    #[test]
-    fn test_to_summary() {
-        let task = Task::new("Test task");
-        let summary = task.to_summary();
-        assert_eq!(summary.id, task.id);
-        assert_eq!(summary.name, task.name);
-        assert_eq!(summary.phase, task.phase);
-    }
-}

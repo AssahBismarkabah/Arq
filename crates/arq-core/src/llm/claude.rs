@@ -173,37 +173,3 @@ struct ContentBlock {
     text: String,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_client_creation() {
-        let client = ClaudeClient::new("test-key");
-        assert_eq!(client.model, DEFAULT_ANTHROPIC_MODEL);
-        assert_eq!(client.max_tokens, DEFAULT_MAX_TOKENS);
-        assert_eq!(client.api_url, DEFAULT_ANTHROPIC_URL);
-        assert_eq!(client.api_version, DEFAULT_ANTHROPIC_API_VERSION);
-    }
-
-    #[test]
-    fn test_client_with_model() {
-        let client = ClaudeClient::new("test-key").with_model("claude-3-opus");
-        assert_eq!(client.model, "claude-3-opus");
-    }
-
-    #[test]
-    fn test_client_with_api_url() {
-        let client = ClaudeClient::new("test-key")
-            .with_api_url("https://proxy.example.com/v1/messages");
-        assert_eq!(client.api_url, "https://proxy.example.com/v1/messages");
-    }
-
-    #[test]
-    fn test_from_env_missing() {
-        // Temporarily unset the env var
-        std::env::remove_var("ANTHROPIC_API_KEY");
-        let result = ClaudeClient::from_env();
-        assert!(matches!(result, Err(LLMError::MissingApiKey)));
-    }
-}

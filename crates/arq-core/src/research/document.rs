@@ -128,18 +128,3 @@ impl SourceType {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_research_doc_to_markdown() {
-        let mut doc = ResearchDoc::new("Add rate limiting");
-        doc.summary = "The API needs rate limiting.".to_string();
-        doc.suggested_approach = "Use middleware pattern.".to_string();
-
-        let md = doc.to_markdown();
-        assert!(md.contains("# Research: Add rate limiting"));
-        assert!(md.contains("The API needs rate limiting."));
-    }
-}

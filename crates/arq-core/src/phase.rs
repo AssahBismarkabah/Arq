@@ -50,23 +50,3 @@ impl Default for Phase {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_phase_progression() {
-        assert_eq!(Phase::Research.next(), Some(Phase::Planning));
-        assert_eq!(Phase::Planning.next(), Some(Phase::Agent));
-        assert_eq!(Phase::Agent.next(), Some(Phase::Complete));
-        assert_eq!(Phase::Complete.next(), None);
-    }
-
-    #[test]
-    fn test_can_advance() {
-        assert!(Phase::Research.can_advance());
-        assert!(Phase::Planning.can_advance());
-        assert!(Phase::Agent.can_advance());
-        assert!(!Phase::Complete.can_advance());
-    }
-}

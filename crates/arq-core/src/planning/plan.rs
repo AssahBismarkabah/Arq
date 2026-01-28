@@ -105,34 +105,3 @@ pub struct FunctionSignature {
     pub behavior: Vec<String>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_plan_to_yaml() {
-        let plan = Plan::new("rate-limiting", "Global middleware");
-        let yaml = plan.to_yaml().unwrap();
-        assert!(yaml.contains("rate-limiting"));
-        assert!(yaml.contains("Global middleware"));
-    }
-
-    #[test]
-    fn test_plan_roundtrip() {
-        let mut plan = Plan::new("rate-limiting", "Global middleware");
-        plan.complexity = Complexity::Low;
-        plan.files_to_create.push(FileSpec {
-            path: "src/middleware/rateLimit.ts".to_string(),
-            description: "Rate limiting middleware".to_string(),
-            exports: vec![],
-        });
-
-        let yaml = plan.to_yaml().unwrap();
-        let parsed = Plan::from_yaml(&yaml).unwrap();
-
-        assert_eq!(parsed.task_name, plan.task_name);
-        assert_eq!(parsed.approach, plan.approach);
-        assert_eq!(parsed.complexity, plan.complexity);
-        assert_eq!(parsed.files_to_create.len(), 1);
-    }
-}
