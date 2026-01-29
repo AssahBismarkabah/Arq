@@ -1,8 +1,11 @@
 //! Code indexing for the knowledge graph.
 
+mod extractor;
 mod generic;
+mod patterns;
 
 pub use generic::GenericIndexer;
+pub use patterns::{DEFAULT_EXTENSIONS, MAX_CHUNK_SIZE, CHUNK_OVERLAP};
 
 use async_trait::async_trait;
 use std::path::Path;

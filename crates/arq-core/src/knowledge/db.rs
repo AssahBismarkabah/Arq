@@ -97,6 +97,7 @@ impl KnowledgeDb {
                 r#"
                 DEFINE TABLE contains TYPE RELATION;
                 DEFINE TABLE calls TYPE RELATION;
+                DEFINE TABLE has_method TYPE RELATION;
                 DEFINE TABLE implements TYPE RELATION;
                 "#,
             )
@@ -183,6 +184,57 @@ impl KnowledgeDb {
     /// Insert a code chunk.
     pub async fn insert_chunk(&self, chunk: &CodeChunk) -> Result<(), KnowledgeError> {
         let _: Option<CodeChunk> = self.db.create("chunk").content(chunk.clone()).await?;
+        Ok(())
+    }
+
+    /// Insert a struct node.
+    pub async fn insert_struct(&self, s: &super::models::StructNode) -> Result<String, KnowledgeError> {
+        let result: Option<super::models::StructNode> = self.db.create("struct").content(s.clone()).await?;
+        let id = result
+            .and_then(|r| r.id)
+            .map(|t| t.to_string())
+            .unwrap_or_else(|| format!("struct:{}", s.name));
+        Ok(id)
+    }
+
+    /// Insert a function node.
+    pub async fn insert_function(&self, f: &super::models::FunctionNode) -> Result<String, KnowledgeError> {
+        let result: Option<super::models::FunctionNode> = self.db.create("fn_node").content(f.clone()).await?;
+        let id = result
+            .and_then(|r| r.id)
+            .map(|t| t.to_string())
+            .unwrap_or_else(|| format!("fn_node:{}", f.name));
+        Ok(id)
+    }
+
+    /// Create a "contains" relation (file contains struct/function).
+    pub async fn relate_contains(&self, file_path: &str, entity_id: &str) -> Result<(), KnowledgeError> {
+        self.db
+            .query("RELATE (SELECT id FROM file WHERE path = $file_path LIMIT 1)->contains->$entity_id")
+            .bind(("file_path", file_path.to_string()))
+            .bind(("entity_id", entity_id.to_string()))
+            .await?;
+        Ok(())
+    }
+
+    /// Create a "calls" relation (function calls another function).
+    pub async fn relate_calls(&self, caller_id: &str, callee_name: &str) -> Result<(), KnowledgeError> {
+        // Find the callee by name and create relation
+        self.db
+            .query("RELATE $caller_id->calls->(SELECT id FROM fn_node WHERE name = $callee_name LIMIT 1)")
+            .bind(("caller_id", caller_id.to_string()))
+            .bind(("callee_name", callee_name.to_string()))
+            .await?;
+        Ok(())
+    }
+
+    /// Create a "has_method" relation (struct has method).
+    pub async fn relate_has_method(&self, struct_id: &str, method_id: &str) -> Result<(), KnowledgeError> {
+        self.db
+            .query("RELATE $struct_id->has_method->$method_id")
+            .bind(("struct_id", struct_id.to_string()))
+            .bind(("method_id", method_id.to_string()))
+            .await?;
         Ok(())
     }
 

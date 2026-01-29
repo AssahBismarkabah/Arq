@@ -252,6 +252,7 @@ dependencies = [
  "fastembed",
  "hex",
  "ignore",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

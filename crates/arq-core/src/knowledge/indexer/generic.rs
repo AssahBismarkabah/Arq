@@ -7,67 +7,13 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+use super::extractor::{extract_calls, extract_functions, extract_line_range, extract_structs};
+use super::patterns::{DEFAULT_EXTENSIONS, MAX_CHUNK_SIZE, CHUNK_OVERLAP};
 use super::Indexer;
 use crate::knowledge::db::KnowledgeDb;
 use crate::knowledge::embedder::Embedder;
 use crate::knowledge::error::KnowledgeError;
 use crate::knowledge::models::{CodeChunk, FileNode, IndexStats};
-
-/// Default extensions to index.
-const DEFAULT_EXTENSIONS: &[&str] = &[
-    // Systems languages
-    "rs",
-    "c",
-    "cpp",
-    "h",
-    "hpp",
-    "go",
-    // JVM languages
-    "java",
-    "kt",
-    "scala",
-    // .NET languages
-    "cs",
-    "fs",
-    // Scripting languages
-    "py",
-    "rb",
-    "php",
-    // JavaScript ecosystem
-    "js",
-    "ts",
-    "tsx",
-    "jsx",
-    "vue",
-    "svelte",
-    // Mobile
-    "swift",
-    // Functional languages
-    "ml",
-    "hs",
-    "ex",
-    "exs",
-    "clj",
-    // Web
-    "html",
-    "css",
-    "scss",
-    // Config/Data
-    "yaml",
-    "yml",
-    "toml",
-    "json",
-    // Documentation
-    "md",
-    // Database
-    "sql",
-];
-
-/// Maximum chunk size in characters.
-const MAX_CHUNK_SIZE: usize = 1000;
-
-/// Chunk overlap in characters.
-const CHUNK_OVERLAP: usize = 100;
 
 /// Generic indexer that works with any language.
 pub struct GenericIndexer {
@@ -77,7 +23,7 @@ pub struct GenericIndexer {
 }
 
 impl GenericIndexer {
-    /// Create a new generic indexer.
+    /// Create a new generic indexer with default extensions.
     pub fn new(db: Arc<KnowledgeDb>, embedder: Arc<dyn Embedder>) -> Self {
         Self {
             db,
@@ -92,21 +38,25 @@ impl GenericIndexer {
         embedder: Arc<dyn Embedder>,
         extensions: Vec<String>,
     ) -> Self {
-        Self {
-            db,
-            embedder,
-            extensions,
-        }
+        Self { db, embedder, extensions }
     }
 
-    /// Compute SHA256 hash of content.
+    /// Check if file extension is in the allowed list.
+    fn should_index(&self, path: &Path) -> bool {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|ext| self.extensions.iter().any(|e| e == ext))
+            .unwrap_or(false)
+    }
+
+    /// Compute SHA256 hash of content for change detection.
     fn compute_hash(content: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(content.as_bytes());
         hex::encode(hasher.finalize())
     }
 
-    /// Split content into overlapping chunks.
+    /// Split content into overlapping chunks for embedding.
     fn chunk_content(content: &str, file_path: &str) -> Vec<CodeChunk> {
         let mut chunks = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
@@ -132,10 +82,11 @@ impl GenericIndexer {
                 ));
 
                 // Start new chunk with overlap
-                let overlap_start = current_line.saturating_sub((CHUNK_OVERLAP / 40) as u32);
+                let overlap_lines = (CHUNK_OVERLAP / 40) as u32;
+                let overlap_start = current_line.saturating_sub(overlap_lines);
                 current_chunk = lines
                     .iter()
-                    .skip(overlap_start as usize - 1)
+                    .skip(overlap_start.saturating_sub(1) as usize)
                     .take((current_line - overlap_start + 1) as usize)
                     .map(|s| format!("{}\n", s))
                     .collect();
@@ -158,12 +109,56 @@ impl GenericIndexer {
         chunks
     }
 
-    /// Check if file extension is in the allowed list.
-    fn should_index(&self, path: &Path) -> bool {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .map(|ext| self.extensions.iter().any(|e| e == ext))
-            .unwrap_or(false)
+    /// Index structs and functions, creating graph relations.
+    async fn index_code_entities(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
+        let structs = extract_structs(content, path);
+        let functions = extract_functions(content, path);
+
+        // Store structs and create contains relations
+        for s in &structs {
+            if let Ok(struct_id) = self.db.insert_struct(s).await {
+                let _ = self.db.relate_contains(path, &struct_id).await;
+            }
+        }
+
+        // Store functions and create relations
+        for f in &functions {
+            if let Ok(fn_id) = self.db.insert_function(f).await {
+                let _ = self.db.relate_contains(path, &fn_id).await;
+
+                // Link methods to parent struct
+                if let Some(parent) = &f.parent_struct {
+                    let _ = self.db.relate_has_method(parent, &fn_id).await;
+                }
+
+                // Extract and create call relations
+                let fn_content = extract_line_range(content, f.start_line, f.end_line);
+                for callee in extract_calls(&fn_content) {
+                    let _ = self.db.relate_calls(&fn_id, &callee).await;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Generate and store embeddings for code chunks.
+    async fn index_embeddings(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
+        let mut chunks = Self::chunk_content(content, path);
+
+        if chunks.is_empty() {
+            return Ok(());
+        }
+
+        let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+        let embeddings = self.embedder.embed(&texts)?;
+
+        for (chunk, embedding) in chunks.iter_mut().zip(embeddings) {
+            chunk.embedding = embedding;
+            self.db.insert_chunk(chunk).await?;
+        }
+
+        Ok(())
     }
 }
 
@@ -207,47 +202,35 @@ impl Indexer for GenericIndexer {
 
         stats.last_updated = Some(chrono::Utc::now());
 
-        // Get chunk count from DB
+        // Get counts from DB
         let db_stats = self.db.get_stats().await?;
         stats.chunks = db_stats.chunks;
+        stats.structs = db_stats.structs;
+        stats.functions = db_stats.functions;
 
         Ok(stats)
     }
 
     async fn index_file(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
-        // Compute hash for change detection
         let hash = Self::compute_hash(content);
 
-        // Check if file already indexed with same hash
+        // Skip if unchanged
         if let Some(existing) = self.db.get_file(path).await? {
             if existing.hash == hash {
-                return Ok(()); // File unchanged, skip
+                return Ok(());
             }
         }
 
-        // Remove old data for this file
+        // Remove old data and create new file node
         self.db.remove_file(path).await?;
-
-        // Create file node
         let file_node = FileNode::new(path, &hash, content.len() as u64);
         self.db.upsert_file(&file_node).await?;
 
-        // Split into chunks
-        let mut chunks = Self::chunk_content(content, path);
+        // Index code entities (structs, functions, relations)
+        self.index_code_entities(path, content).await?;
 
-        if chunks.is_empty() {
-            return Ok(());
-        }
-
-        // Generate embeddings for all chunks
-        let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
-        let embeddings = self.embedder.embed(&texts)?;
-
-        // Store chunks with embeddings
-        for (chunk, embedding) in chunks.iter_mut().zip(embeddings) {
-            chunk.embedding = embedding;
-            self.db.insert_chunk(chunk).await?;
-        }
+        // Index embeddings
+        self.index_embeddings(path, content).await?;
 
         Ok(())
     }
