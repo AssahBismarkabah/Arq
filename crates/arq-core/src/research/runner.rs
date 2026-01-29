@@ -49,12 +49,15 @@ impl<L: LLM> ResearchRunner<L> {
         response: &str,
         context: &Context,
     ) -> Result<ResearchDoc, ResearchError> {
+        // Strip markdown code block if present
+        let json_str = extract_json(response);
+
         // Try to parse as JSON
-        let parsed: ResearchResponse = serde_json::from_str(response).map_err(|e| {
+        let parsed: ResearchResponse = serde_json::from_str(json_str).map_err(|e| {
             ResearchError::ParseError(format!(
                 "Failed to parse LLM response as JSON: {}. Response: {}",
                 e,
-                &response[..response.len().min(500)]
+                &json_str[..json_str.len().min(500)]
             ))
         })?;
 
@@ -121,6 +124,25 @@ struct DependencyResponse {
     name: String,
     description: String,
     is_external: bool,
+}
+
+/// Extracts JSON from a response that might be wrapped in markdown code blocks.
+fn extract_json(response: &str) -> &str {
+    let trimmed = response.trim();
+
+    // Check for ```json ... ``` or ``` ... ```
+    if trimmed.starts_with("```") {
+        // Find the end of the first line (after ```json or ```)
+        if let Some(start) = trimmed.find('\n') {
+            let rest = &trimmed[start + 1..];
+            // Find the closing ```
+            if let Some(end) = rest.rfind("```") {
+                return rest[..end].trim();
+            }
+        }
+    }
+
+    trimmed
 }
 
 /// Errors that can occur during research.

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use arq_core::{
-    ContextBuilder, FileStorage, Phase, Provider, ResearchRunner, TaskManager,
+    Config, ContextBuilder, FileStorage, Phase, Provider, ResearchRunner, TaskManager,
 };
 
 const ARQ_DIR: &str = ".arq";
@@ -187,16 +187,19 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("Starting research for: {}", task.prompt);
             println!();
 
-            // Create LLM client (auto-detects provider from environment)
-            let llm = Provider::from_env().map_err(|e| {
+            // Load config (from arq.toml or defaults)
+            let config = Config::load().unwrap_or_default();
+
+            // Create LLM client from config
+            let llm = Provider::from_config(&config.llm).build().map_err(|e| {
                 format!(
-                    "{}. Set ARQ_LLM_API_KEY or OPENAI_API_KEY or ANTHROPIC_API_KEY.",
+                    "{}. Configure [llm] in arq.toml or set OPENAI_API_KEY or ANTHROPIC_API_KEY.",
                     e
                 )
             })?;
 
-            // Create context builder (current directory)
-            let context_builder = ContextBuilder::new(".");
+            // Create context builder with config
+            let context_builder = ContextBuilder::with_config(".", config.context);
 
             // Create runner
             let runner = ResearchRunner::new(llm, context_builder);
