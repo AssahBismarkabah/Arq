@@ -55,21 +55,21 @@ impl KnowledgeDb {
             )
             .await?;
 
-        // Function table
+        // Function table (fn_node to avoid reserved keyword)
         self.db
             .query(
                 r#"
-                DEFINE TABLE function SCHEMAFULL;
-                DEFINE FIELD name ON function TYPE string;
-                DEFINE FIELD file_path ON function TYPE string;
-                DEFINE FIELD parent_struct ON function TYPE option<string>;
-                DEFINE FIELD start_line ON function TYPE int;
-                DEFINE FIELD end_line ON function TYPE int;
-                DEFINE FIELD visibility ON function TYPE string;
-                DEFINE FIELD is_async ON function TYPE bool;
-                DEFINE FIELD signature ON function TYPE string;
-                DEFINE FIELD doc_comment ON function TYPE option<string>;
-                DEFINE INDEX function_name ON function FIELDS name;
+                DEFINE TABLE fn_node SCHEMAFULL;
+                DEFINE FIELD name ON fn_node TYPE string;
+                DEFINE FIELD file_path ON fn_node TYPE string;
+                DEFINE FIELD parent_struct ON fn_node TYPE option<string>;
+                DEFINE FIELD start_line ON fn_node TYPE int;
+                DEFINE FIELD end_line ON fn_node TYPE int;
+                DEFINE FIELD visibility ON fn_node TYPE string;
+                DEFINE FIELD is_async ON fn_node TYPE bool;
+                DEFINE FIELD signature ON fn_node TYPE string;
+                DEFINE FIELD doc_comment ON fn_node TYPE option<string>;
+                DEFINE INDEX fn_node_name ON fn_node FIELDS name;
                 "#,
             )
             .await?;
@@ -135,7 +135,7 @@ impl KnowledgeDb {
     pub async fn upsert_file(&self, file: &FileNode) -> Result<(), KnowledgeError> {
         let path = file.path.clone();
         self.db
-            .query("DELETE FROM file WHERE path = $path")
+            .query("DELETE file WHERE path = $path")
             .bind(("path", path))
             .await?;
 
@@ -158,16 +158,22 @@ impl KnowledgeDb {
 
     /// Remove a file and its associated chunks.
     pub async fn remove_file(&self, path: &str) -> Result<(), KnowledgeError> {
+        // Delete in separate queries - SurrealDB 2.0 multi-statement issues
         let path_owned = path.to_string();
         self.db
-            .query(
-                r#"
-                DELETE FROM chunk WHERE file_path = $path;
-                DELETE FROM struct WHERE file_path = $path;
-                DELETE FROM function WHERE file_path = $path;
-                DELETE FROM file WHERE path = $path;
-                "#,
-            )
+            .query("DELETE chunk WHERE file_path = $path")
+            .bind(("path", path_owned.clone()))
+            .await?;
+        self.db
+            .query("DELETE struct WHERE file_path = $path")
+            .bind(("path", path_owned.clone()))
+            .await?;
+        self.db
+            .query("DELETE fn_node WHERE file_path = $path")
+            .bind(("path", path_owned.clone()))
+            .await?;
+        self.db
+            .query("DELETE file WHERE path = $path")
             .bind(("path", path_owned))
             .await?;
 
@@ -186,25 +192,28 @@ impl KnowledgeDb {
         embedding: &[f32],
         limit: usize,
     ) -> Result<Vec<SearchResult>, KnowledgeError> {
+        // K must be a literal in HNSW query, format it directly
+        let query = format!(
+            r#"
+            SELECT
+                file_path as path,
+                vector::similarity::cosine(embedding, $embedding) as score,
+                start_line,
+                end_line,
+                string::slice(content, 0, 200) as preview,
+                entity_id,
+                entity_type
+            FROM chunk
+            WHERE embedding <|{},COSINE|> $embedding
+            ORDER BY score DESC
+            "#,
+            limit
+        );
+
         let results: Vec<SearchResult> = self
             .db
-            .query(
-                r#"
-                SELECT
-                    file_path as path,
-                    vector::similarity::cosine(embedding, $embedding) as score,
-                    start_line,
-                    end_line,
-                    string::slice(content, 0, 200) as preview,
-                    entity_id,
-                    entity_type
-                FROM chunk
-                WHERE embedding <|$limit,COSINE|> $embedding
-                ORDER BY score DESC
-                "#,
-            )
+            .query(&query)
             .bind(("embedding", embedding.to_vec()))
-            .bind(("limit", limit))
             .await?
             .take(0)?;
 
@@ -247,16 +256,38 @@ impl KnowledgeDb {
 
     /// Get statistics about the indexed data.
     pub async fn get_stats(&self) -> Result<IndexStats, KnowledgeError> {
-        let files: Option<usize> = self.db.query("SELECT count() FROM file GROUP ALL").await?.take(0)?;
-        let structs: Option<usize> = self.db.query("SELECT count() FROM struct GROUP ALL").await?.take(0)?;
-        let functions: Option<usize> = self.db.query("SELECT count() FROM function GROUP ALL").await?.take(0)?;
-        let chunks: Option<usize> = self.db.query("SELECT count() FROM chunk GROUP ALL").await?.take(0)?;
+        // SurrealDB returns count as { count: N }
+        #[derive(serde::Deserialize)]
+        struct CountResult {
+            count: i64,
+        }
+
+        let files: Option<CountResult> = self
+            .db
+            .query("SELECT count() FROM file GROUP ALL")
+            .await?
+            .take(0)?;
+        let structs: Option<CountResult> = self
+            .db
+            .query("SELECT count() FROM struct GROUP ALL")
+            .await?
+            .take(0)?;
+        let functions: Option<CountResult> = self
+            .db
+            .query("SELECT count() FROM fn_node GROUP ALL")
+            .await?
+            .take(0)?;
+        let chunks: Option<CountResult> = self
+            .db
+            .query("SELECT count() FROM chunk GROUP ALL")
+            .await?
+            .take(0)?;
 
         Ok(IndexStats {
-            files: files.unwrap_or(0),
-            structs: structs.unwrap_or(0),
-            functions: functions.unwrap_or(0),
-            chunks: chunks.unwrap_or(0),
+            files: files.map(|r| r.count as usize).unwrap_or(0),
+            structs: structs.map(|r| r.count as usize).unwrap_or(0),
+            functions: functions.map(|r| r.count as usize).unwrap_or(0),
+            chunks: chunks.map(|r| r.count as usize).unwrap_or(0),
             total_size: 0, // TODO: Calculate from file sizes
             last_updated: Some(chrono::Utc::now()),
         })

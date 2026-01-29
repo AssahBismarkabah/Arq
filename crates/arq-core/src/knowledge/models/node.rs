@@ -1,7 +1,7 @@
 //! Node types for the knowledge graph.
 
 use serde::{Deserialize, Serialize};
-use surrealdb::sql::Thing;
+use surrealdb::sql::{Datetime, Thing};
 
 /// A file node in the knowledge graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +20,7 @@ pub struct FileNode {
     /// File size in bytes.
     pub size: u64,
     /// When the file was indexed.
-    pub indexed_at: chrono::DateTime<chrono::Utc>,
+    pub indexed_at: Datetime,
 }
 
 impl FileNode {
@@ -45,7 +45,7 @@ impl FileNode {
             extension,
             hash: hash.into(),
             size,
-            indexed_at: chrono::Utc::now(),
+            indexed_at: Datetime::default(),
         }
     }
 }
