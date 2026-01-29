@@ -1,9 +1,13 @@
-use arq_core::{FileStorage, TaskManager, Phase, ResearchDoc};
+use arq_core::{FileStorage, StorageConfig, TaskManager, Phase, ResearchDoc};
 use tempfile::TempDir;
 
 fn create_test_manager() -> (TaskManager<FileStorage>, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    let storage = FileStorage::new(temp_dir.path());
+    let config = StorageConfig {
+        data_dir: temp_dir.path().to_string_lossy().to_string(),
+        ..StorageConfig::default()
+    };
+    let storage = FileStorage::with_config(config);
     let manager = TaskManager::new(storage);
     (manager, temp_dir)
 }

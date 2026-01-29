@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
 use arq_core::{
-    Config, ContextBuilder, FileStorage, Phase, Provider, ResearchRunner, TaskManager,
+    Config, ContextBuilder, FileStorage, IndexStats, KnowledgeGraph, KnowledgeStore,
+    Phase, Provider, ResearchRunner, SearchResult, TaskManager,
 };
-
-const ARQ_DIR: &str = ".arq";
+use std::path::Path;
 
 #[derive(Parser)]
 #[command(name = "arq")]
@@ -39,6 +39,23 @@ enum Commands {
     Research,
     /// Advance to the next phase
     Advance,
+    /// Index codebase into knowledge graph
+    Init {
+        /// Force re-indexing even if already indexed
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Search code using semantic search
+    Search {
+        /// Search query
+        #[arg(required = true)]
+        query: Vec<String>,
+        /// Maximum number of results
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+    /// Show knowledge graph statistics
+    KgStatus,
 }
 
 #[tokio::main]
@@ -51,7 +68,8 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let storage = FileStorage::new(ARQ_DIR);
+    let config = Config::load().unwrap_or_default();
+    let storage = FileStorage::with_config(config.storage.clone());
     let mut manager = TaskManager::new(storage);
 
     match cli.command {
@@ -62,7 +80,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("  ID: {}", task.id);
             println!("  Phase: {}", task.phase.display_name());
             println!("  Prompt: {}", task.prompt);
-            println!("\nTask saved to {}/tasks/{}/", ARQ_DIR, task.id);
+            let task_path = config.storage.task_path(&task.id);
+            println!("\nTask saved to {}", task_path.display());
             println!("\nNext: Run 'arq research' to analyze the codebase.");
         }
         Commands::Status => {
@@ -187,9 +206,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("Starting research for: {}", task.prompt);
             println!();
 
-            // Load config (from arq.toml or defaults)
-            let config = Config::load().unwrap_or_default();
-
             // Create LLM client from config
             let llm = Provider::from_config(&config.llm).build().map_err(|e| {
                 format!(
@@ -199,12 +215,22 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             })?;
 
             // Create context builder with config
-            let context_builder = ContextBuilder::with_config(".", config.context);
+            let context_builder = ContextBuilder::with_config(".", config.context.clone());
 
-            // Create runner
-            let runner = ResearchRunner::new(llm, context_builder);
-
-            println!("Scanning codebase...");
+            // Check if knowledge graph is available
+            let db_path = config.knowledge.db_full_path(&config.storage);
+            let runner = if db_path.exists() {
+                println!("Using knowledge graph for smart context...");
+                let kg = KnowledgeGraph::open(&db_path).await?;
+                ResearchRunner::with_knowledge_store(
+                    llm,
+                    context_builder,
+                    std::sync::Arc::new(kg),
+                )
+            } else {
+                println!("Scanning codebase (run 'arq init' for faster semantic search)...");
+                ResearchRunner::new(llm, context_builder)
+            };
 
             // Run research
             let doc = runner.run(&task).await?;
@@ -218,7 +244,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             // Save research doc
             manager.set_research_doc(&task.id, doc)?;
 
-            println!("Research saved to {}/tasks/{}/research-doc.md", ARQ_DIR, task.id);
+            let task_path = config.storage.task_path(&task.id);
+            println!("Research saved to {}/research-doc.md", task_path.display());
             println!("\nNext: Run 'arq advance' to move to Planning phase.");
         }
         Commands::Advance => {
@@ -246,6 +273,103 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 "Advanced to {} phase.",
                 new_phase.display_name()
             );
+        }
+        Commands::Init { force } => {
+            let db_path = config.knowledge.db_full_path(&config.storage);
+            let project_dir = config.storage.project_dir();
+
+            // Create project directory if it doesn't exist
+            std::fs::create_dir_all(&project_dir)?;
+
+            // Check if already initialized
+            if db_path.exists() && !force {
+                println!("Knowledge graph already initialized.");
+                println!("Use --force to re-index.");
+                return Ok(());
+            }
+
+            // Remove existing database if force re-indexing
+            if force && db_path.exists() {
+                println!("Removing existing knowledge graph...");
+                std::fs::remove_dir_all(&db_path)?;
+            }
+
+            println!("Initializing knowledge graph...");
+            println!("Loading embedding model (this may take a moment on first run)...");
+
+            let kg = KnowledgeGraph::open(&db_path).await?;
+            kg.initialize().await?;
+
+            println!("Indexing codebase...");
+            let stats: IndexStats = kg.index_directory(Path::new(".")).await?;
+
+            println!("\nKnowledge graph initialized!");
+            println!("  Files indexed: {}", stats.files);
+            println!("  Code chunks: {}", stats.chunks);
+            println!("  Total size: {} KB", stats.total_size / 1024);
+            if let Some(ref updated) = stats.last_updated {
+                println!("  Last updated: {}", updated.format("%Y-%m-%d %H:%M"));
+            }
+            println!("\nDatabase stored at: {}", db_path.display());
+        }
+        Commands::Search { query, limit } => {
+            let db_path = config.knowledge.db_full_path(&config.storage);
+
+            if !db_path.exists() {
+                return Err("Knowledge graph not initialized. Run 'arq init' first.".into());
+            }
+
+            let kg = KnowledgeGraph::open(&db_path).await?;
+
+            let query_str = query.join(" ");
+            println!("Searching for: {}\n", query_str);
+
+            let results: Vec<SearchResult> = kg.search_code(&query_str, limit).await?;
+
+            if results.is_empty() {
+                println!("No results found.");
+            } else {
+                println!("Found {} results:\n", results.len());
+                for (i, result) in results.iter().enumerate() {
+                    println!(
+                        "{}. {} (lines {}-{}) - score: {:.2}",
+                        i + 1,
+                        result.path,
+                        result.start_line,
+                        result.end_line,
+                        result.score
+                    );
+                    if let Some(ref preview) = result.preview {
+                        for line in preview.lines().take(3) {
+                            println!("   {}", line);
+                        }
+                    }
+                    println!();
+                }
+            }
+        }
+        Commands::KgStatus => {
+            let db_path = config.knowledge.db_full_path(&config.storage);
+
+            if !db_path.exists() {
+                println!("Knowledge graph not initialized.");
+                println!("Run 'arq init' to index your codebase.");
+                return Ok(());
+            }
+
+            let kg = KnowledgeGraph::open(&db_path).await?;
+            let stats: IndexStats = kg.get_stats().await?;
+
+            println!("Knowledge Graph Status\n");
+            println!("  Files indexed: {}", stats.files);
+            println!("  Structs: {}", stats.structs);
+            println!("  Functions: {}", stats.functions);
+            println!("  Code chunks: {}", stats.chunks);
+            println!("  Total size: {} KB", stats.total_size / 1024);
+            if let Some(ref updated) = stats.last_updated {
+                println!("  Last updated: {}", updated.format("%Y-%m-%d %H:%M"));
+            }
+            println!("\nDatabase path: {}", db_path.display());
         }
     }
 

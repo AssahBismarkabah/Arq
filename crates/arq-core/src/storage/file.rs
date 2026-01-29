@@ -13,7 +13,7 @@ use super::Storage;
 ///
 /// Stores tasks in a directory structure:
 /// ```text
-/// {base_path}/
+/// ~/.arq/projects/{project-hash}/
 ///   current           # Contains current task ID
 ///   tasks/
 ///     {task-id}/
@@ -27,20 +27,17 @@ pub struct FileStorage {
 }
 
 impl FileStorage {
-    /// Creates a new FileStorage with the given base path and default config.
-    pub fn new(base_path: impl Into<PathBuf>) -> Self {
-        Self {
-            base_path: base_path.into(),
-            config: StorageConfig::default(),
-        }
+    /// Creates a new FileStorage with default config, using project-specific directory.
+    pub fn new() -> Self {
+        let config = StorageConfig::default();
+        let base_path = config.project_dir();
+        Self { base_path, config }
     }
 
     /// Creates a new FileStorage with custom configuration.
     pub fn with_config(config: StorageConfig) -> Self {
-        Self {
-            base_path: PathBuf::from(&config.data_dir),
-            config,
-        }
+        let base_path = config.project_dir();
+        Self { base_path, config }
     }
 
     /// Returns the path to the tasks directory.

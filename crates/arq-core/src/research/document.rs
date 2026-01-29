@@ -114,6 +114,8 @@ pub enum SourceType {
     Confluence,
     /// Git history (commit, blame, etc.)
     Git,
+    /// A knowledge graph search result (semantic search)
+    KnowledgeGraph,
 }
 
 impl SourceType {
@@ -124,6 +126,7 @@ impl SourceType {
             SourceType::Slack => "Slack",
             SourceType::Confluence => "Confluence",
             SourceType::Git => "Git",
+            SourceType::KnowledgeGraph => "Knowledge Graph",
         }
     }
 }

@@ -1,15 +1,19 @@
 use arq_core::{FileStorage, Storage, StorageConfig, Task};
 use tempfile::TempDir;
 
-fn create_test_storage() -> (FileStorage, TempDir) {
+fn create_test_storage() -> (FileStorage, TempDir, StorageConfig) {
     let temp_dir = TempDir::new().unwrap();
-    let storage = FileStorage::new(temp_dir.path());
-    (storage, temp_dir)
+    let config = StorageConfig {
+        data_dir: temp_dir.path().to_string_lossy().to_string(),
+        ..StorageConfig::default()
+    };
+    let storage = FileStorage::with_config(config.clone());
+    (storage, temp_dir, config)
 }
 
 #[test]
 fn test_save_and_load_task() {
-    let (storage, _temp) = create_test_storage();
+    let (storage, _temp, _config) = create_test_storage();
 
     let task = Task::new("Test task");
     storage.save_task(&task).unwrap();
@@ -22,7 +26,7 @@ fn test_save_and_load_task() {
 
 #[test]
 fn test_list_tasks() {
-    let (storage, _temp) = create_test_storage();
+    let (storage, _temp, _config) = create_test_storage();
 
     let task1 = Task::new("First task");
     let task2 = Task::new("Second task");
@@ -36,7 +40,7 @@ fn test_list_tasks() {
 
 #[test]
 fn test_delete_task() {
-    let (storage, _temp) = create_test_storage();
+    let (storage, _temp, _config) = create_test_storage();
 
     let task = Task::new("Task to delete");
     storage.save_task(&task).unwrap();
@@ -48,7 +52,7 @@ fn test_delete_task() {
 
 #[test]
 fn test_current_task() {
-    let (storage, _temp) = create_test_storage();
+    let (storage, _temp, _config) = create_test_storage();
 
     assert!(storage.get_current_task_id().unwrap().is_none());
 
@@ -73,11 +77,12 @@ fn test_custom_config() {
         plan_file: "implementation.yaml".to_string(),
     };
 
-    let storage = FileStorage::with_config(config);
+    let storage = FileStorage::with_config(config.clone());
     let task = Task::new("Custom config task");
     storage.save_task(&task).unwrap();
 
-    // Verify custom path is used
-    let custom_path = temp_dir.path().join("my-tasks").join(&task.id).join("metadata.json");
+    // Verify custom path is used (now under projects/{hash}/)
+    let project_dir = config.project_dir();
+    let custom_path = project_dir.join("my-tasks").join(&task.id).join("metadata.json");
     assert!(custom_path.exists());
 }

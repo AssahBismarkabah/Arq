@@ -42,6 +42,9 @@ pub struct Config {
 
     /// Research phase configuration.
     pub research: ResearchConfig,
+
+    /// Knowledge graph configuration.
+    pub knowledge: KnowledgeConfig,
 }
 
 impl Default for Config {
@@ -51,6 +54,7 @@ impl Default for Config {
             llm: LLMConfig::default(),
             storage: StorageConfig::default(),
             research: ResearchConfig::default(),
+            knowledge: KnowledgeConfig::default(),
         }
     }
 }
@@ -247,7 +251,7 @@ impl LLMConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StorageConfig {
-    /// Base directory for arq data (default: ".arq").
+    /// Base directory for arq data (default: "~/.arq").
     pub data_dir: String,
 
     /// Task subdirectory name.
@@ -276,9 +280,48 @@ impl Default for StorageConfig {
 }
 
 impl StorageConfig {
-    /// Get the full path to the tasks directory.
+    /// Resolve the data directory path, expanding ~ to home directory.
+    pub fn resolve_data_dir(&self) -> PathBuf {
+        let path = &self.data_dir;
+        if path.starts_with("~/") {
+            if let Some(home) = dirs::home_dir() {
+                return home.join(&path[2..]);
+            }
+        } else if path == "~" {
+            if let Some(home) = dirs::home_dir() {
+                return home;
+            }
+        }
+        PathBuf::from(path)
+    }
+
+    /// Get the project-specific directory based on current working directory.
+    /// Uses a hash of the absolute path to create unique project folders.
+    pub fn project_dir(&self) -> PathBuf {
+        let base = self.resolve_data_dir();
+        let project_hash = Self::compute_project_hash();
+        base.join("projects").join(project_hash)
+    }
+
+    /// Compute a short hash of the current working directory for project isolation.
+    fn compute_project_hash() -> String {
+        use sha2::{Digest, Sha256};
+
+        let cwd = std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."));
+        let canonical = cwd.canonicalize().unwrap_or(cwd);
+
+        let mut hasher = Sha256::new();
+        hasher.update(canonical.to_string_lossy().as_bytes());
+        let hash = hasher.finalize();
+
+        // Use first 8 chars of hex hash
+        hex::encode(&hash[..4])
+    }
+
+    /// Get the full path to the tasks directory for the current project.
     pub fn tasks_path(&self) -> PathBuf {
-        PathBuf::from(&self.data_dir).join(&self.tasks_dir)
+        self.project_dir().join(&self.tasks_dir)
     }
 
     /// Get the full path to a task directory.
@@ -305,6 +348,49 @@ impl Default for ResearchConfig {
             system_prompt: None, // Use built-in default
             error_context_length: DEFAULT_ERROR_CONTEXT_LENGTH,
         }
+    }
+}
+
+/// Knowledge graph configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KnowledgeConfig {
+    /// Database path relative to data_dir (default: "knowledge.db").
+    pub db_path: String,
+
+    /// Embedding model name (default: "BGESmallENV15").
+    pub embedding_model: String,
+
+    /// Maximum chunk size in characters (default: 1000).
+    pub max_chunk_size: usize,
+
+    /// Chunk overlap in characters (default: 100).
+    pub chunk_overlap: usize,
+
+    /// Default search result limit (default: 20).
+    pub search_limit: usize,
+
+    /// File extensions to index (uses context.include_extensions if empty).
+    pub extensions: Vec<String>,
+}
+
+impl Default for KnowledgeConfig {
+    fn default() -> Self {
+        Self {
+            db_path: DEFAULT_KNOWLEDGE_DB_PATH.to_string(),
+            embedding_model: DEFAULT_EMBEDDING_MODEL.to_string(),
+            max_chunk_size: DEFAULT_CHUNK_SIZE,
+            chunk_overlap: DEFAULT_CHUNK_OVERLAP,
+            search_limit: DEFAULT_SEARCH_LIMIT,
+            extensions: Vec::new(), // Use context.include_extensions by default
+        }
+    }
+}
+
+impl KnowledgeConfig {
+    /// Get the full path to the knowledge database for the current project.
+    pub fn db_full_path(&self, storage_config: &StorageConfig) -> PathBuf {
+        storage_config.project_dir().join(&self.db_path)
     }
 }
 

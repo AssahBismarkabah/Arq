@@ -1,0 +1,264 @@
+//! SurrealDB embedded database for the knowledge graph.
+
+use std::path::Path;
+use surrealdb::engine::local::{Db, RocksDb};
+use surrealdb::Surreal;
+
+use super::error::KnowledgeError;
+use super::models::{CodeChunk, FileNode, IndexStats, SearchResult};
+
+/// Database connection for the knowledge graph.
+pub struct KnowledgeDb {
+    db: Surreal<Db>,
+}
+
+impl KnowledgeDb {
+    /// Open or create a database at the given path.
+    pub async fn open(path: &Path) -> Result<Self, KnowledgeError> {
+        let db = Surreal::new::<RocksDb>(path).await?;
+        db.use_ns("arq").use_db("knowledge").await?;
+
+        Ok(Self { db })
+    }
+
+    /// Initialize the database schema.
+    pub async fn initialize_schema(&self) -> Result<(), KnowledgeError> {
+        // File table
+        self.db
+            .query(
+                r#"
+                DEFINE TABLE file SCHEMAFULL;
+                DEFINE FIELD path ON file TYPE string;
+                DEFINE FIELD name ON file TYPE string;
+                DEFINE FIELD extension ON file TYPE string;
+                DEFINE FIELD hash ON file TYPE string;
+                DEFINE FIELD size ON file TYPE int;
+                DEFINE FIELD indexed_at ON file TYPE datetime;
+                DEFINE INDEX file_path ON file FIELDS path UNIQUE;
+                "#,
+            )
+            .await?;
+
+        // Struct table
+        self.db
+            .query(
+                r#"
+                DEFINE TABLE struct SCHEMAFULL;
+                DEFINE FIELD name ON struct TYPE string;
+                DEFINE FIELD file_path ON struct TYPE string;
+                DEFINE FIELD start_line ON struct TYPE int;
+                DEFINE FIELD end_line ON struct TYPE int;
+                DEFINE FIELD visibility ON struct TYPE string;
+                DEFINE FIELD doc_comment ON struct TYPE option<string>;
+                DEFINE INDEX struct_name ON struct FIELDS name;
+                "#,
+            )
+            .await?;
+
+        // Function table
+        self.db
+            .query(
+                r#"
+                DEFINE TABLE function SCHEMAFULL;
+                DEFINE FIELD name ON function TYPE string;
+                DEFINE FIELD file_path ON function TYPE string;
+                DEFINE FIELD parent_struct ON function TYPE option<string>;
+                DEFINE FIELD start_line ON function TYPE int;
+                DEFINE FIELD end_line ON function TYPE int;
+                DEFINE FIELD visibility ON function TYPE string;
+                DEFINE FIELD is_async ON function TYPE bool;
+                DEFINE FIELD signature ON function TYPE string;
+                DEFINE FIELD doc_comment ON function TYPE option<string>;
+                DEFINE INDEX function_name ON function FIELDS name;
+                "#,
+            )
+            .await?;
+
+        // Code chunk table with vector index
+        self.db
+            .query(
+                r#"
+                DEFINE TABLE chunk SCHEMAFULL;
+                DEFINE FIELD file_path ON chunk TYPE string;
+                DEFINE FIELD entity_id ON chunk TYPE option<string>;
+                DEFINE FIELD entity_type ON chunk TYPE string;
+                DEFINE FIELD content ON chunk TYPE string;
+                DEFINE FIELD start_line ON chunk TYPE int;
+                DEFINE FIELD end_line ON chunk TYPE int;
+                DEFINE FIELD embedding ON chunk TYPE array<float>;
+                DEFINE INDEX chunk_embedding ON chunk FIELDS embedding HNSW DIMENSION 384 DIST COSINE;
+                "#,
+            )
+            .await?;
+
+        // Graph relations
+        self.db
+            .query(
+                r#"
+                DEFINE TABLE contains TYPE RELATION;
+                DEFINE TABLE calls TYPE RELATION;
+                DEFINE TABLE implements TYPE RELATION;
+                "#,
+            )
+            .await?;
+
+        // Metadata table
+        self.db
+            .query(
+                r#"
+                DEFINE TABLE metadata SCHEMAFULL;
+                DEFINE FIELD key ON metadata TYPE string;
+                DEFINE FIELD value ON metadata TYPE any;
+                DEFINE FIELD updated_at ON metadata TYPE datetime;
+                DEFINE INDEX metadata_key ON metadata FIELDS key UNIQUE;
+
+                INSERT INTO metadata { key: 'initialized', value: true, updated_at: time::now() };
+                "#,
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    /// Check if the database has been initialized.
+    pub async fn is_initialized(&self) -> Result<bool, KnowledgeError> {
+        let result: Option<serde_json::Value> = self
+            .db
+            .query("SELECT value FROM metadata WHERE key = 'initialized'")
+            .await?
+            .take(0)?;
+
+        Ok(result.is_some())
+    }
+
+    /// Insert or update a file node.
+    pub async fn upsert_file(&self, file: &FileNode) -> Result<(), KnowledgeError> {
+        let path = file.path.clone();
+        self.db
+            .query("DELETE FROM file WHERE path = $path")
+            .bind(("path", path))
+            .await?;
+
+        let _: Option<FileNode> = self.db.create("file").content(file.clone()).await?;
+        Ok(())
+    }
+
+    /// Get a file by path.
+    pub async fn get_file(&self, path: &str) -> Result<Option<FileNode>, KnowledgeError> {
+        let path_owned = path.to_string();
+        let mut result = self
+            .db
+            .query("SELECT * FROM file WHERE path = $path")
+            .bind(("path", path_owned))
+            .await?;
+
+        let file: Option<FileNode> = result.take(0)?;
+        Ok(file)
+    }
+
+    /// Remove a file and its associated chunks.
+    pub async fn remove_file(&self, path: &str) -> Result<(), KnowledgeError> {
+        let path_owned = path.to_string();
+        self.db
+            .query(
+                r#"
+                DELETE FROM chunk WHERE file_path = $path;
+                DELETE FROM struct WHERE file_path = $path;
+                DELETE FROM function WHERE file_path = $path;
+                DELETE FROM file WHERE path = $path;
+                "#,
+            )
+            .bind(("path", path_owned))
+            .await?;
+
+        Ok(())
+    }
+
+    /// Insert a code chunk.
+    pub async fn insert_chunk(&self, chunk: &CodeChunk) -> Result<(), KnowledgeError> {
+        let _: Option<CodeChunk> = self.db.create("chunk").content(chunk.clone()).await?;
+        Ok(())
+    }
+
+    /// Search for chunks by embedding similarity.
+    pub async fn search_by_embedding(
+        &self,
+        embedding: &[f32],
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, KnowledgeError> {
+        let results: Vec<SearchResult> = self
+            .db
+            .query(
+                r#"
+                SELECT
+                    file_path as path,
+                    vector::similarity::cosine(embedding, $embedding) as score,
+                    start_line,
+                    end_line,
+                    string::slice(content, 0, 200) as preview,
+                    entity_id,
+                    entity_type
+                FROM chunk
+                WHERE embedding <|$limit,COSINE|> $embedding
+                ORDER BY score DESC
+                "#,
+            )
+            .bind(("embedding", embedding.to_vec()))
+            .bind(("limit", limit))
+            .await?
+            .take(0)?;
+
+        Ok(results)
+    }
+
+    /// Get entities that the given entity depends on.
+    pub async fn get_dependencies(&self, entity_id: &str) -> Result<Vec<String>, KnowledgeError> {
+        let entity_id_owned = entity_id.to_string();
+        let results: Vec<String> = self
+            .db
+            .query(
+                r#"
+                SELECT out as dep FROM calls WHERE in = $entity_id
+                "#,
+            )
+            .bind(("entity_id", entity_id_owned))
+            .await?
+            .take(0)?;
+
+        Ok(results)
+    }
+
+    /// Get entities that depend on the given entity (reverse dependencies).
+    pub async fn get_impact(&self, entity_id: &str) -> Result<Vec<String>, KnowledgeError> {
+        let entity_id_owned = entity_id.to_string();
+        let results: Vec<String> = self
+            .db
+            .query(
+                r#"
+                SELECT in as caller FROM calls WHERE out = $entity_id
+                "#,
+            )
+            .bind(("entity_id", entity_id_owned))
+            .await?
+            .take(0)?;
+
+        Ok(results)
+    }
+
+    /// Get statistics about the indexed data.
+    pub async fn get_stats(&self) -> Result<IndexStats, KnowledgeError> {
+        let files: Option<usize> = self.db.query("SELECT count() FROM file GROUP ALL").await?.take(0)?;
+        let structs: Option<usize> = self.db.query("SELECT count() FROM struct GROUP ALL").await?.take(0)?;
+        let functions: Option<usize> = self.db.query("SELECT count() FROM function GROUP ALL").await?.take(0)?;
+        let chunks: Option<usize> = self.db.query("SELECT count() FROM chunk GROUP ALL").await?.take(0)?;
+
+        Ok(IndexStats {
+            files: files.unwrap_or(0),
+            structs: structs.unwrap_or(0),
+            functions: functions.unwrap_or(0),
+            chunks: chunks.unwrap_or(0),
+            total_size: 0, // TODO: Calculate from file sizes
+            last_updated: Some(chrono::Utc::now()),
+        })
+    }
+}

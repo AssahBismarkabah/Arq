@@ -156,8 +156,8 @@ pub const DEFAULT_OPENROUTER_URL: &str = "https://openrouter.ai/api/v1";
 // Storage Defaults
 // ============================================================================
 
-/// Default data directory.
-pub const DEFAULT_DATA_DIR: &str = ".arq";
+/// Default data directory (in user home).
+pub const DEFAULT_DATA_DIR: &str = "~/.arq";
 
 /// Default tasks subdirectory.
 pub const DEFAULT_TASKS_DIR: &str = "tasks";
@@ -183,6 +183,25 @@ pub const DEFAULT_ERROR_CONTEXT_LENGTH: usize = 500;
 
 /// Default word limit for task name derivation.
 pub const DEFAULT_TASK_NAME_WORDS: usize = 5;
+
+// ============================================================================
+// Knowledge Graph Defaults
+// ============================================================================
+
+/// Default knowledge database path (relative to data_dir).
+pub const DEFAULT_KNOWLEDGE_DB_PATH: &str = "knowledge.db";
+
+/// Default embedding model name.
+pub const DEFAULT_EMBEDDING_MODEL: &str = "BGESmallENV15";
+
+/// Default maximum chunk size in characters.
+pub const DEFAULT_CHUNK_SIZE: usize = 1000;
+
+/// Default chunk overlap in characters.
+pub const DEFAULT_CHUNK_OVERLAP: usize = 100;
+
+/// Default search result limit.
+pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 
 // ============================================================================
 // System Prompts

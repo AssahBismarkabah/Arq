@@ -8,8 +8,9 @@ pub mod storage;
 pub mod manager;
 pub mod llm;
 pub mod context;
+pub mod knowledge;
 
-pub use config::{Config, ConfigError, ContextConfig, LLMConfig, StorageConfig, ResearchConfig};
+pub use config::{Config, ConfigError, ContextConfig, LLMConfig, StorageConfig, ResearchConfig, KnowledgeConfig};
 pub use phase::Phase;
 pub use task::{Task, TaskSummary, TaskError};
 pub use research::{ResearchDoc, ResearchRunner, ResearchError};
@@ -18,3 +19,4 @@ pub use storage::{Storage, FileStorage, StorageError};
 pub use manager::{TaskManager, ManagerError};
 pub use llm::{LLM, LLMError, ClaudeClient, OpenAIClient, Provider};
 pub use context::{Context, ContextBuilder, ContextError};
+pub use knowledge::{KnowledgeGraph, KnowledgeStore, KnowledgeError, IndexStats, SearchResult};
