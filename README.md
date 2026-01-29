@@ -50,6 +50,15 @@ cd arq
 cargo build --release
 ```
 
+## Data Storage
+
+Phase outputs are stored in your project's `.arq/` directory (add to `.gitignore` if desired):
+
+- `.arq/research-doc.md` - Research findings for current task
+- `.arq/plan.yaml` - Implementation plan for current task
+
+Internal data (knowledge graph, task metadata) is stored in `~/.arq/` to keep your project clean.
+
 ## Configuration
 
 Create an optional `arq.toml` in your project root. See [Configuration Reference](#configuration-reference) for all options.

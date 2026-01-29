@@ -265,6 +265,10 @@ pub struct StorageConfig {
 
     /// Plan file name.
     pub plan_file: String,
+
+    /// Project root override (for testing). If None, uses current_dir().
+    #[serde(skip)]
+    pub project_root: Option<PathBuf>,
 }
 
 impl Default for StorageConfig {
@@ -275,6 +279,7 @@ impl Default for StorageConfig {
             task_file: DEFAULT_TASK_FILE.to_string(),
             research_file: DEFAULT_RESEARCH_FILE.to_string(),
             plan_file: DEFAULT_PLAN_FILE.to_string(),
+            project_root: None,
         }
     }
 }
@@ -295,8 +300,18 @@ impl StorageConfig {
         PathBuf::from(path)
     }
 
-    /// Get the project-specific directory based on current working directory.
+    /// Get the local .arq directory in the current project.
+    /// This is where user-visible outputs (research-doc.md, plan.yaml) are stored.
+    pub fn local_arq_dir(&self) -> PathBuf {
+        let root = self.project_root.clone().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        });
+        root.join(".arq")
+    }
+
+    /// Get the project-specific directory in ~/.arq based on current working directory.
     /// Uses a hash of the absolute path to create unique project folders.
+    /// This is where internal data (knowledge.db, task metadata) is stored.
     pub fn project_dir(&self) -> PathBuf {
         let base = self.resolve_data_dir();
         let project_hash = Self::compute_project_hash();
@@ -319,14 +334,24 @@ impl StorageConfig {
         hex::encode(&hash[..4])
     }
 
-    /// Get the full path to the tasks directory for the current project.
+    /// Get the full path to the tasks directory (in ~/.arq/projects/{hash}/).
     pub fn tasks_path(&self) -> PathBuf {
         self.project_dir().join(&self.tasks_dir)
     }
 
-    /// Get the full path to a task directory.
+    /// Get the full path to a task's metadata directory (in ~/.arq/).
     pub fn task_path(&self, task_id: &str) -> PathBuf {
         self.tasks_path().join(task_id)
+    }
+
+    /// Get the path to research-doc.md in the local .arq directory.
+    pub fn local_research_path(&self) -> PathBuf {
+        self.local_arq_dir().join(&self.research_file)
+    }
+
+    /// Get the path to plan.yaml in the local .arq directory.
+    pub fn local_plan_path(&self) -> PathBuf {
+        self.local_arq_dir().join(&self.plan_file)
     }
 }
 

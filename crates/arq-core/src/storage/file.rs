@@ -11,17 +11,19 @@ use super::Storage;
 
 /// File-based storage implementation.
 ///
-/// Stores tasks in a directory structure:
+/// Stores data in two locations:
 /// ```text
-/// ~/.arq/projects/{project-hash}/
-///   current           # Contains current task ID
-///   tasks/
-///     {task-id}/
-///       task.json
-///       research-doc.md
-///       plan.yaml
+/// project/.arq/                    # User-visible outputs
+///   research-doc.md                # Current task's research
+///   plan.yaml                      # Current task's plan
+///
+/// ~/.arq/projects/{hash}/          # Internal data
+///   current                        # Current task ID
+///   tasks/{task-id}/
+///     task.json                    # Task metadata
 /// ```
 pub struct FileStorage {
+    /// Base path for internal data (~/.arq/projects/{hash}/)
     base_path: PathBuf,
     config: StorageConfig,
 }
@@ -55,14 +57,28 @@ impl FileStorage {
         self.task_dir(id).join(&self.config.task_file)
     }
 
-    /// Returns the path to a task's research document.
-    fn research_doc_file(&self, id: &str) -> PathBuf {
-        self.task_dir(id).join(&self.config.research_file)
+    /// Returns the path to the local .arq directory in the project.
+    fn local_arq_dir(&self) -> PathBuf {
+        self.config.local_arq_dir()
     }
 
-    /// Returns the path to a task's plan file.
-    fn plan_file(&self, id: &str) -> PathBuf {
-        self.task_dir(id).join(&self.config.plan_file)
+    /// Returns the path to research-doc.md in local .arq/.
+    fn research_doc_file(&self) -> PathBuf {
+        self.config.local_research_path()
+    }
+
+    /// Returns the path to plan.yaml in local .arq/.
+    fn plan_file(&self) -> PathBuf {
+        self.config.local_plan_path()
+    }
+
+    /// Ensures the local .arq directory exists.
+    fn ensure_local_arq_dir(&self) -> Result<(), StorageError> {
+        let dir = self.local_arq_dir();
+        if !dir.exists() {
+            fs::create_dir_all(&dir).map_err(|e| StorageError::io(&dir, e))?;
+        }
+        Ok(())
     }
 
     /// Returns the path to the current task marker file.
@@ -161,20 +177,20 @@ impl Storage for FileStorage {
         Ok(())
     }
 
-    fn save_research_doc(&self, task_id: &str, doc: &ResearchDoc) -> Result<(), StorageError> {
-        self.ensure_task_dir(task_id)?;
+    fn save_research_doc(&self, _task_id: &str, doc: &ResearchDoc) -> Result<(), StorageError> {
+        self.ensure_local_arq_dir()?;
 
-        let path = self.research_doc_file(task_id);
+        let path = self.research_doc_file();
         let markdown = doc.to_markdown();
         fs::write(&path, markdown).map_err(|e| StorageError::io(&path, e))?;
 
         Ok(())
     }
 
-    fn save_plan(&self, task_id: &str, plan: &Plan) -> Result<(), StorageError> {
-        self.ensure_task_dir(task_id)?;
+    fn save_plan(&self, _task_id: &str, plan: &Plan) -> Result<(), StorageError> {
+        self.ensure_local_arq_dir()?;
 
-        let path = self.plan_file(task_id);
+        let path = self.plan_file();
         let yaml = plan.to_yaml()?;
         fs::write(&path, yaml).map_err(|e| StorageError::io(&path, e))?;
 

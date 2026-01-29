@@ -5,6 +5,7 @@ fn create_test_storage() -> (FileStorage, TempDir, StorageConfig) {
     let temp_dir = TempDir::new().unwrap();
     let config = StorageConfig {
         data_dir: temp_dir.path().to_string_lossy().to_string(),
+        project_root: Some(temp_dir.path().to_path_buf()),
         ..StorageConfig::default()
     };
     let storage = FileStorage::with_config(config.clone());
@@ -75,6 +76,7 @@ fn test_custom_config() {
         task_file: "metadata.json".to_string(),
         research_file: "research.md".to_string(),
         plan_file: "implementation.yaml".to_string(),
+        project_root: Some(temp_dir.path().to_path_buf()),
     };
 
     let storage = FileStorage::with_config(config.clone());

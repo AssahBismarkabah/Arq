@@ -5,6 +5,7 @@ fn create_test_manager() -> (TaskManager<FileStorage>, TempDir) {
     let temp_dir = TempDir::new().unwrap();
     let config = StorageConfig {
         data_dir: temp_dir.path().to_string_lossy().to_string(),
+        project_root: Some(temp_dir.path().to_path_buf()),
         ..StorageConfig::default()
     };
     let storage = FileStorage::with_config(config);

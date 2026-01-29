@@ -80,8 +80,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("  ID: {}", task.id);
             println!("  Phase: {}", task.phase.display_name());
             println!("  Prompt: {}", task.prompt);
-            let task_path = config.storage.task_path(&task.id);
-            println!("\nTask saved to {}", task_path.display());
             println!("\nNext: Run 'arq research' to analyze the codebase.");
         }
         Commands::Status => {
@@ -244,8 +242,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             // Save research doc
             manager.set_research_doc(&task.id, doc)?;
 
-            let task_path = config.storage.task_path(&task.id);
-            println!("Research saved to {}/research-doc.md", task_path.display());
+            let research_path = config.storage.local_research_path();
+            println!("Research saved to {}", research_path.display());
             println!("\nNext: Run 'arq advance' to move to Planning phase.");
         }
         Commands::Advance => {
