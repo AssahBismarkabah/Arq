@@ -2,7 +2,12 @@
 name = "arq-core"
 version = "0.1.0"
 edition = "2021"
-description = "Core library for Arq - spec-driven AI coding tool"
+description = "Core library for Arq - AI-powered code analysis with semantic search and knowledge graph"
+license = "MIT"
+repository = "https://github.com/AssahBismarkabah/Arq"
+homepage = "https://github.com/AssahBismarkabah/Arq"
+keywords = ["code-analysis", "knowledge-graph", "embeddings", "semantic-search"]
+categories = ["development-tools"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

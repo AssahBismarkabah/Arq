@@ -2,7 +2,13 @@
 name = "arq-cli"
 version = "0.1.0"
 edition = "2021"
-description = "CLI for Arq - spec-driven AI coding tool"
+description = "Arq - AI-powered code analysis and research tool with semantic search and knowledge graph visualization"
+license = "MIT"
+repository = "https://github.com/AssahBismarkabah/Arq"
+homepage = "https://github.com/AssahBismarkabah/Arq"
+readme = "../../README.md"
+keywords = ["cli", "code-analysis", "knowledge-graph", "ai", "semantic-search"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "arq"
