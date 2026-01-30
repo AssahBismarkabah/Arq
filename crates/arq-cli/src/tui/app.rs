@@ -7,8 +7,8 @@ use ratatui::prelude::*;
 use tokio::sync::mpsc;
 
 use arq_core::{
-    Config, ContextBuilder, FileStorage, ResearchProgress, ResearchRunner,
-    StreamChunk, Task, TaskManager,
+    Config, ContextBuilder, FileStorage, ResearchDoc, ResearchProgress, ResearchRunner,
+    Task, TaskManager,
 };
 
 use super::event::{Event, EventHandler, ResearchResult};
@@ -63,6 +63,23 @@ pub enum InputMode {
     #[default]
     Normal,
     Editing,
+}
+
+/// Research validation state.
+#[derive(Debug, Clone, Default)]
+pub enum ResearchState {
+    /// No research in progress
+    #[default]
+    Idle,
+    /// Research is running with streaming
+    Researching,
+    /// Research complete, awaiting user approval or correction
+    AwaitingValidation {
+        task_id: String,
+        pending_doc: ResearchDoc,
+    },
+    /// Processing user correction
+    Refining,
 }
 
 /// A chat message in the conversation.
@@ -183,6 +200,8 @@ pub struct App {
     pub current_task: Option<Task>,
     /// Status message
     pub status_message: Option<String>,
+    /// Research validation state
+    pub research_state: ResearchState,
 }
 
 impl App {
@@ -204,6 +223,7 @@ impl App {
             manager,
             current_task: current_task.clone(),
             status_message: None,
+            research_state: ResearchState::Idle,
         };
 
         // Add welcome message
@@ -347,37 +367,32 @@ impl App {
         }
     }
 
-    /// Handle research completion - save doc and update UI.
+    /// Handle research completion - await user validation before saving.
     fn handle_research_complete(&mut self, result: ResearchResult) {
         self.is_streaming = false;
 
-        // Format summary for display
-        let summary = format!(
-            "## Research Summary\n\n{}\n\n## Suggested Approach\n\n{}",
-            result.doc.summary, result.doc.suggested_approach
-        );
-        self.chat_messages.push(ChatMessage::assistant(&summary));
+        // Use the document's built-in markdown formatting for complete display
+        let content = result.doc.to_markdown();
+        self.chat_messages.push(ChatMessage::assistant(&content));
 
-        // Save via TaskManager
-        match self.manager.set_research_doc(&result.task_id, result.doc) {
-            Ok(task) => {
-                self.current_task = Some(task);
-                self.status_message = Some("Research saved to .arq/research-doc.md".to_string());
-                self.chat_messages.push(ChatMessage::system(
-                    "Research document saved. You can proceed to Planner tab."
-                ));
-            }
-            Err(e) => {
-                self.chat_messages.push(ChatMessage::system(format!(
-                    "Warning: Failed to save research: {}", e
-                )));
-            }
-        }
+        // Set awaiting validation state (DON'T save yet - wait for approval)
+        self.research_state = ResearchState::AwaitingValidation {
+            task_id: result.task_id,
+            pending_doc: result.doc,
+        };
+
+        // Prompt user for validation
+        self.chat_messages.push(ChatMessage::system(
+            "Is this understanding correct?\n\
+             Press [a] to approve and save, or type corrections."
+        ));
+        self.status_message = Some("Awaiting approval... [a] approve, [i] type corrections".to_string());
     }
 
     /// Handle research failure.
     fn handle_research_failed(&mut self, error: String) {
         self.is_streaming = false;
+        self.research_state = ResearchState::Idle;
         self.chat_messages.push(ChatMessage::system(format!("Research failed: {}", error)));
 
         // Mark progress as failed
@@ -385,6 +400,31 @@ impl App {
             if item.status == ProgressStatus::InProgress {
                 item.status = ProgressStatus::Failed;
                 break;
+            }
+        }
+    }
+
+    /// Approve research and save - called when user presses 'a' during validation.
+    fn approve_research(&mut self, task_id: String, doc: ResearchDoc) {
+        match self.manager.set_research_doc(&task_id, doc.clone()) {
+            Ok(task) => {
+                self.current_task = Some(task);
+                self.status_message = Some("Research saved to .arq/research-doc.md".to_string());
+                self.chat_messages.push(ChatMessage::system(
+                    "Research approved and saved. You can now proceed to Planner tab."
+                ));
+                // Mark final progress item complete
+                self.set_progress_status(4, ProgressStatus::Complete);
+            }
+            Err(e) => {
+                self.chat_messages.push(ChatMessage::system(format!(
+                    "Failed to save research: {}", e
+                )));
+                // Restore state for retry
+                self.research_state = ResearchState::AwaitingValidation {
+                    task_id,
+                    pending_doc: doc,
+                };
             }
         }
     }
@@ -405,12 +445,18 @@ impl App {
                 self.should_quit = true;
             }
             KeyCode::Tab | KeyCode::Right => {
-                self.selected_tab = self.selected_tab.next();
-                self.reset_progress_items();
+                let next = self.selected_tab.next();
+                if self.can_switch_to_tab(&next) {
+                    self.selected_tab = next;
+                    self.reset_progress_items();
+                }
             }
             KeyCode::BackTab | KeyCode::Left => {
-                self.selected_tab = self.selected_tab.previous();
-                self.reset_progress_items();
+                let prev = self.selected_tab.previous();
+                if self.can_switch_to_tab(&prev) {
+                    self.selected_tab = prev;
+                    self.reset_progress_items();
+                }
             }
             KeyCode::Char('i') | KeyCode::Enter => {
                 self.input_mode = InputMode::Editing;
@@ -420,6 +466,14 @@ impl App {
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 self.scroll_up();
+            }
+            KeyCode::Char('a') => {
+                // Approve research if awaiting validation
+                if let ResearchState::AwaitingValidation { task_id, pending_doc } =
+                    std::mem::replace(&mut self.research_state, ResearchState::Idle)
+                {
+                    self.approve_research(task_id, pending_doc);
+                }
             }
             _ => {}
         }
@@ -455,7 +509,24 @@ impl App {
 
         match self.selected_tab {
             SelectedTab::Researcher => {
-                self.start_research(input, event_tx);
+                // Check current state to decide action
+                match &self.research_state {
+                    ResearchState::Idle => {
+                        // New research
+                        self.start_research(input, event_tx);
+                    }
+                    ResearchState::AwaitingValidation { .. } => {
+                        // User is providing correction - extract values and refine
+                        if let ResearchState::AwaitingValidation { task_id, pending_doc } =
+                            std::mem::replace(&mut self.research_state, ResearchState::Refining)
+                        {
+                            self.refine_research(task_id, pending_doc, input, event_tx);
+                        }
+                    }
+                    ResearchState::Researching | ResearchState::Refining => {
+                        // Already streaming, ignore input
+                    }
+                }
             }
             SelectedTab::Planner => {
                 self.chat_messages.push(ChatMessage::system(
@@ -477,6 +548,7 @@ impl App {
         self.is_streaming = true;
         self.stream_buffer.clear();
         self.reset_progress_items();
+        self.status_message = Some("Starting research...".to_string());
 
         // Create task via manager (persists immediately)
         let task = match self.manager.create_task(&prompt) {
@@ -496,6 +568,11 @@ impl App {
         // Get config values we need
         let config = self.config.clone();
 
+        // Add message to show research is starting
+        self.chat_messages.push(ChatMessage::system(format!(
+            "Researching: {} ...", task.prompt
+        )));
+
         // Spawn the research task
         tokio::spawn(async move {
             match run_research_task(task, config, event_tx.clone()).await {
@@ -510,6 +587,88 @@ impl App {
                 }
             }
         });
+
+        // Set state to Researching
+        self.research_state = ResearchState::Researching;
+    }
+
+    /// Refine research based on user correction.
+    fn refine_research(
+        &mut self,
+        task_id: String,
+        original_doc: ResearchDoc,
+        correction: String,
+        event_tx: mpsc::UnboundedSender<Event>,
+    ) {
+        self.is_streaming = true;
+        self.stream_buffer.clear();
+        self.reset_progress_items();
+        self.research_state = ResearchState::Refining;
+
+        // Build refinement prompt that includes original findings + correction
+        let refinement_prompt = format!(
+            "Previous research findings:\n\n## Summary\n{}\n\n## Suggested Approach\n{}\n\n---\n\n\
+             User correction/feedback:\n{}\n\n\
+             Please update the research based on this feedback. \
+             Address the user's concerns and provide corrected findings.",
+            original_doc.summary,
+            original_doc.suggested_approach,
+            correction
+        );
+
+        // Create a temporary task for the refinement (uses refinement prompt)
+        let task = Task::new(&refinement_prompt);
+
+        let config = self.config.clone();
+        let task_id_clone = task_id.clone();
+
+        // Spawn the refinement task (reuses run_research_task)
+        tokio::spawn(async move {
+            match run_research_task(task, config, event_tx.clone()).await {
+                Ok(doc) => {
+                    // Return with original task_id so we save to the right task
+                    let _ = event_tx.send(Event::ResearchComplete(ResearchResult {
+                        task_id: task_id_clone,
+                        doc,
+                    }));
+                }
+                Err(error) => {
+                    let _ = event_tx.send(Event::ResearchFailed(error));
+                }
+            }
+        });
+    }
+
+    /// Check if we can switch to the given tab.
+    /// Gates access: Planner requires saved research, Agent requires saved plan.
+    fn can_switch_to_tab(&mut self, tab: &SelectedTab) -> bool {
+        match tab {
+            SelectedTab::Researcher => true, // Always accessible
+            SelectedTab::Planner => {
+                // Requires saved research document
+                let has_research = self.current_task
+                    .as_ref()
+                    .map(|t| t.research_doc.is_some())
+                    .unwrap_or(false);
+                if !has_research {
+                    self.status_message = Some("Complete and approve research first".to_string());
+                    return false;
+                }
+                true
+            }
+            SelectedTab::Agent => {
+                // Requires saved plan (not implemented yet, allow for now)
+                let has_plan = self.current_task
+                    .as_ref()
+                    .map(|t| t.plan.is_some())
+                    .unwrap_or(false);
+                if !has_plan {
+                    self.status_message = Some("Complete planning first".to_string());
+                    return false;
+                }
+                true
+            }
+        }
     }
 
     /// Scroll chat up.
@@ -530,7 +689,7 @@ async fn run_research_task(
     config: Config,
     event_tx: mpsc::UnboundedSender<Event>,
 ) -> Result<arq_core::ResearchDoc, String> {
-    use arq_core::{ClaudeClient, OpenAIClient};
+    use arq_core::{ClaudeClient, OpenAIClient, StreamChunk};
     use std::env;
 
     // Create context builder with config
@@ -588,15 +747,19 @@ async fn run_research_task(
                 .map_err(|e| format!("Research failed: {}", e))?
         }
         _ => {
-            // OpenAI or OpenAI-compatible
+            // OpenAI or OpenAI-compatible (use non-streaming for compatibility)
             let base_url = config.llm.base_url_or_default();
             let api_key = config.llm.api_key_or_env().unwrap_or_default();
             let client = OpenAIClient::new(&base_url, &api_key, &model);
             let runner = ResearchRunner::new(client, context_builder);
-            runner
-                .run_streaming(&task, progress_tx, stream_tx)
+            // Use non-streaming for better compatibility with various providers
+            let doc = runner
+                .run_with_progress(&task, progress_tx)
                 .await
-                .map_err(|e| format!("Research failed: {}", e))?
+                .map_err(|e| format!("Research failed: {}", e))?;
+            // Send done signal to stream
+            let _ = stream_tx.send(StreamChunk::done());
+            doc
         }
     };
 

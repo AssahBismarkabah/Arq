@@ -5,7 +5,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use super::app::{App, InputMode};
+use super::app::{App, InputMode, ResearchState};
 use super::components::{chat, input, progress, tabs};
 
 /// Render the entire UI.
@@ -55,9 +55,18 @@ fn render_main_content(app: &App, frame: &mut Frame, area: Rect) {
 
 /// Render the status bar.
 fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
-    let mode_str = match app.input_mode {
-        InputMode::Normal => "[i] Edit  [Tab] Switch  [j/k] Scroll  [q] Quit",
-        InputMode::Editing => "[Enter] Send  [Esc] Cancel",
+    // Context-aware key bindings based on research state
+    let mode_str = match (&app.input_mode, &app.research_state) {
+        (InputMode::Editing, _) => "[Enter] Send  [Esc] Cancel",
+        (InputMode::Normal, ResearchState::AwaitingValidation { .. }) => {
+            "[a] Approve  [i] Edit corrections  [Tab] Switch  [q] Quit"
+        }
+        (InputMode::Normal, ResearchState::Researching | ResearchState::Refining) => {
+            "Researching...  [q] Quit"
+        }
+        (InputMode::Normal, ResearchState::Idle) => {
+            "[i] Edit  [Tab] Switch  [j/k] Scroll  [q] Quit"
+        }
     };
 
     let task_info = app.current_task.as_ref().map_or_else(
@@ -65,7 +74,12 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
         |t| format!("{} ({})", t.name, t.phase.display_name()),
     );
 
-    let status = format!("{}  |  {}", mode_str, task_info);
+    // Show status_message if present, otherwise show task_info
+    let right_side = app.status_message.as_ref()
+        .map(|s| s.as_str())
+        .unwrap_or(&task_info);
+
+    let status = format!("{}  |  {}", mode_str, right_side);
 
     let status_bar = Paragraph::new(status)
         .style(Style::default().fg(Color::DarkGray));
