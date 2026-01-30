@@ -16,16 +16,23 @@
         <div>Loading knowledge graph...</div>
     </div>
 
-    <!-- Controls Panel -->
-    <div id="controls">
+    <!-- Header Bar (Title + Search) -->
+    <div id="header-bar">
         <h1>Arq Knowledge Graph</h1>
         <input type="text" id="search" placeholder="Search nodes...">
+    </div>
 
-        <button id="layout-btn" class="btn active">Stop Layout</button>
-        <button id="reset-btn" class="btn">Reset View</button>
+    <!-- Controls Panel (Bottom Left) -->
+    <div id="controls">
+        <div class="btn-group">
+            <button id="layout-btn" class="btn active">Stop Layout</button>
+            <button id="reset-btn" class="btn">Reset View</button>
+        </div>
+
+        <div class="divider"></div>
 
         <div class="filter-group" id="node-type-filters">
-            <h3>Filter by Type</h3>
+            <h3>Filter</h3>
             <!-- Filters are dynamically populated based on graph data -->
         </div>
     </div>

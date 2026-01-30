@@ -72,11 +72,13 @@ impl GraphBuilder {
         builder.load_enums(kg).await;
         builder.load_impls(kg).await;
 
-        // Build ID mapping for edge resolution
+        // Build ID mappings for edge resolution
         builder.build_id_mapping(kg).await;
 
-        // Load edges
+        // Load all edge types
         builder.load_call_edges(kg).await;
+        builder.load_impl_trait_edges(kg).await;
+        builder.load_method_edges(kg).await;
 
         GraphData {
             nodes: builder.nodes,
@@ -147,14 +149,40 @@ impl GraphBuilder {
 
     /// Build ID-to-key mapping for edge resolution.
     async fn build_id_mapping(&mut self, kg: &KnowledgeGraph) {
+        // Map functions
         if let Ok(functions) = kg.list_all_functions().await {
             for func in functions {
                 let key = Self::make_key("fn", &func.file_path, func.start_line, &func.name);
-
-                // Map various ID formats to the canonical key
                 self.id_to_key.insert(func.qualified_name.clone(), key.clone());
                 self.id_to_key.insert(format!("function:{}:{}", func.file_path, func.name), key.clone());
                 self.id_to_key.insert(func.name.clone(), key.clone());
+            }
+        }
+
+        // Map structs
+        if let Ok(structs) = kg.list_structs().await {
+            for s in structs {
+                let key = Self::make_key("struct", &s.file_path, s.start_line, &s.name);
+                self.id_to_key.insert(s.qualified_name.clone(), key.clone());
+                self.id_to_key.insert(s.name.clone(), key.clone());
+            }
+        }
+
+        // Map traits
+        if let Ok(traits) = kg.list_traits().await {
+            for t in traits {
+                let key = Self::make_key("trait", &t.file_path, t.start_line, &t.name);
+                self.id_to_key.insert(t.qualified_name.clone(), key.clone());
+                self.id_to_key.insert(t.name.clone(), key.clone());
+            }
+        }
+
+        // Map enums
+        if let Ok(enums) = kg.list_enums().await {
+            for e in enums {
+                let key = Self::make_key("enum", &e.file_path, e.start_line, &e.name);
+                self.id_to_key.insert(e.qualified_name.clone(), key.clone());
+                self.id_to_key.insert(e.name.clone(), key.clone());
             }
         }
     }
@@ -173,19 +201,43 @@ impl GraphBuilder {
                     .cloned();
 
                 if let (Some(src), Some(tgt)) = (source, target) {
-                    // Only add if both nodes exist and edge is unique
-                    if self.seen_keys.contains(&src) && self.seen_keys.contains(&tgt) {
-                        let edge_key = format!("{}:{}", src, tgt);
+                    self.add_edge(src, tgt, "calls");
+                }
+            }
+        }
+    }
 
-                        if self.seen_edges.insert(edge_key) {
-                            self.edges.push(GraphEdge {
-                                source: src,
-                                target: tgt,
-                                attributes: Some(EdgeAttributes {
-                                    relationship: format!("{:?}", call.call_type),
-                                }),
-                            });
-                        }
+    /// Load impl -> trait relationship edges.
+    async fn load_impl_trait_edges(&mut self, kg: &KnowledgeGraph) {
+        if let Ok(impls) = kg.list_impls().await {
+            for i in impls {
+                if let Some(ref trait_name) = i.trait_name {
+                    // Find the impl node key
+                    let target = Self::extract_simple_name(&i.target_type);
+                    let label = format!("{} for {}", Self::extract_simple_name(trait_name), target);
+                    let impl_key = Self::make_key("impl", &i.file_path, i.start_line, &label);
+
+                    // Find the trait node by name
+                    if let Some(trait_key) = self.id_to_key.get(&Self::extract_simple_name(trait_name)).cloned() {
+                        self.add_edge(impl_key, trait_key, "implements");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Load struct/impl -> method relationship edges.
+    async fn load_method_edges(&mut self, kg: &KnowledgeGraph) {
+        if let Ok(functions) = kg.list_all_functions().await {
+            for func in functions {
+                // If function has a parent (is a method), create edge from parent to method
+                if let Some(ref parent) = func.parent {
+                    let func_key = Self::make_key("fn", &func.file_path, func.start_line, &func.name);
+
+                    // Try to find the parent struct/impl
+                    let parent_name = Self::extract_simple_name(parent);
+                    if let Some(parent_key) = self.id_to_key.get(&parent_name).cloned() {
+                        self.add_edge(parent_key, func_key, "has_method");
                     }
                 }
             }
@@ -221,6 +273,24 @@ impl GraphBuilder {
             format!("{}...", &name[..27])
         } else {
             name.to_string()
+        }
+    }
+
+    /// Add an edge if both nodes exist and edge is unique.
+    fn add_edge(&mut self, source: String, target: String, relationship: &str) {
+        // Only add if both nodes exist
+        if self.seen_keys.contains(&source) && self.seen_keys.contains(&target) {
+            let edge_key = format!("{}:{}:{}", source, relationship, target);
+
+            if self.seen_edges.insert(edge_key) {
+                self.edges.push(GraphEdge {
+                    source,
+                    target,
+                    attributes: Some(EdgeAttributes {
+                        relationship: relationship.to_string(),
+                    }),
+                });
+            }
         }
     }
 
