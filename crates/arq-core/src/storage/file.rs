@@ -28,6 +28,12 @@ pub struct FileStorage {
     config: StorageConfig,
 }
 
+impl Default for FileStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FileStorage {
     /// Creates a new FileStorage with default config, using project-specific directory.
     pub fn new() -> Self {

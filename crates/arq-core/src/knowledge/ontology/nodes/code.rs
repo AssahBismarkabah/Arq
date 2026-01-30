@@ -3,6 +3,7 @@
 //! These represent the core code constructs that make up a codebase.
 
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 // =============================================================================
 // FUNCTION ENTITY
@@ -33,7 +34,7 @@ pub struct FunctionEntity {
     /// End line number
     pub end_line: u32,
 
-    /// Function signature (e.g., "fn process(data: &Data) -> Result<Output>")
+    /// Function signature (e.g., `fn process(data: &Data) -> Result<Output>`)
     pub signature: String,
 
     /// Parent struct/impl if this is a method
@@ -350,17 +351,21 @@ pub enum Visibility {
     Private,
 }
 
-impl Visibility {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl FromStr for Visibility {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "pub" | "public" => Self::Public,
             "pub(crate)" => Self::PublicCrate,
             "pub(super)" => Self::PublicSuper,
             s if s.starts_with("pub(in") => Self::PublicIn,
             _ => Self::Private,
-        }
+        })
     }
+}
 
+impl Visibility {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Public => "pub",

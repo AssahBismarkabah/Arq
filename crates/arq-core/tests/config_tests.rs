@@ -43,9 +43,10 @@ data_dir = ".custom-arq"
 
 #[test]
 fn test_model_or_default() {
-    let mut config = LLMConfig::default();
-
-    config.provider = "anthropic".to_string();
+    let mut config = LLMConfig {
+        provider: "anthropic".to_string(),
+        ..Default::default()
+    };
     assert_eq!(config.model_or_default(), DEFAULT_ANTHROPIC_MODEL);
 
     config.provider = "ollama".to_string();

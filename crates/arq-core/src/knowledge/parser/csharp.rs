@@ -243,7 +243,7 @@ impl CSharpParser {
                                             name: TreeSitterParser::node_text(&name_node, content)
                                                 .to_string(),
                                             type_name: type_name.clone(),
-                                            visibility: visibility.clone(),
+                                            visibility,
                                             attributes: modifiers.clone(),
                                             doc_comment: None,
                                         });
@@ -354,11 +354,7 @@ impl CSharpParser {
         } else if modifiers.contains(&"private".to_string()) {
             Visibility::Private
         } else if modifiers.contains(&"protected".to_string()) {
-            if modifiers.contains(&"internal".to_string()) {
-                Visibility::PublicSuper // protected internal
-            } else {
-                Visibility::PublicSuper
-            }
+            Visibility::PublicSuper // protected or protected internal
         } else if modifiers.contains(&"internal".to_string()) {
             Visibility::PublicCrate
         } else {

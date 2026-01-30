@@ -28,7 +28,7 @@ pub enum ConfigError {
 }
 
 /// Main configuration structure.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// Context gathering configuration.
@@ -45,18 +45,6 @@ pub struct Config {
 
     /// Knowledge graph configuration.
     pub knowledge: KnowledgeConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            context: ContextConfig::default(),
-            llm: LLMConfig::default(),
-            storage: StorageConfig::default(),
-            research: ResearchConfig::default(),
-            knowledge: KnowledgeConfig::default(),
-        }
-    }
 }
 
 impl Config {
@@ -297,9 +285,9 @@ impl StorageConfig {
     /// Resolve the data directory path, expanding ~ to home directory.
     pub fn resolve_data_dir(&self) -> PathBuf {
         let path = &self.data_dir;
-        if path.starts_with("~/") {
+        if let Some(stripped) = path.strip_prefix("~/") {
             if let Some(home) = dirs::home_dir() {
-                return home.join(&path[2..]);
+                return home.join(stripped);
             }
         } else if path == "~" {
             if let Some(home) = dirs::home_dir() {

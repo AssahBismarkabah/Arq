@@ -75,11 +75,7 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
     );
 
     // Show status_message if present, otherwise show task_info
-    let right_side = app
-        .status_message
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or(&task_info);
+    let right_side = app.status_message.as_deref().unwrap_or(&task_info);
 
     let status = format!("{}  |  {}  |  {}", mode_str, model_info, right_side);
 

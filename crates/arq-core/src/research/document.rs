@@ -62,7 +62,7 @@ impl ResearchDoc {
                 dep.name, dep_type, dep.description
             ));
         }
-        md.push_str("\n");
+        md.push('\n');
 
         md.push_str("## Suggested Approach\n\n");
         md.push_str(&self.suggested_approach);

@@ -249,7 +249,7 @@ impl JavaParser {
                                     name: TreeSitterParser::node_text(&name_node, content)
                                         .to_string(),
                                     type_name: type_name.clone(),
-                                    visibility: visibility.clone(),
+                                    visibility,
                                     attributes: modifiers.clone(),
                                     doc_comment: None,
                                 });

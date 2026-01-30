@@ -810,7 +810,7 @@ impl KnowledgeDb {
             "chunk",
         ] {
             self.db
-                .query(&format!("DELETE {} WHERE file_path = $path", table))
+                .query(format!("DELETE {} WHERE file_path = $path", table))
                 .bind(("path", path_owned.clone()))
                 .await?;
         }
@@ -833,7 +833,7 @@ impl KnowledgeDb {
 
         async fn count_table(db: &Surreal<Db>, table: &str) -> Result<usize, KnowledgeError> {
             let result: Option<CountResult> = db
-                .query(&format!("SELECT count() FROM {} GROUP ALL", table))
+                .query(format!("SELECT count() FROM {} GROUP ALL", table))
                 .await?
                 .take(0)?;
             Ok(result.map(|r| r.count as usize).unwrap_or(0))

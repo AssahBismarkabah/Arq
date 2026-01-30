@@ -63,10 +63,10 @@ impl EventHandler {
                             Some(Ok(evt)) => {
                                 if let crossterm::event::Event::Key(key) = evt {
                                     // Only handle key press events, not release
-                                    if key.kind == KeyEventKind::Press {
-                                        if event_tx.send(Event::Key(key)).is_err() {
-                                            break;
-                                        }
+                                    if key.kind == KeyEventKind::Press
+                                        && event_tx.send(Event::Key(key)).is_err()
+                                    {
+                                        break;
                                     }
                                 }
                             }

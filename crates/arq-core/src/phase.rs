@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 ///
 /// Tasks progress linearly through phases:
 /// Research → Planning → Agent → Complete
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Phase {
     /// Analyzing codebase, gathering context, validating understanding
+    #[default]
     Research,
     /// Creating architectural decisions and specifications
     Planning,
@@ -41,11 +42,5 @@ impl Phase {
             Phase::Agent => "Agent",
             Phase::Complete => "Complete",
         }
-    }
-}
-
-impl Default for Phase {
-    fn default() -> Self {
-        Phase::Research
     }
 }

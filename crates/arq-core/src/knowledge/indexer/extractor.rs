@@ -130,7 +130,7 @@ pub fn extract_line_range(content: &str, start: u32, end: u32) -> String {
 /// Extract an identifier from regex captures, filtering out keywords.
 fn extract_identifier(cap: &regex::Captures, keywords: &[&str]) -> String {
     cap.iter()
-        .filter_map(|m| m)
+        .flatten()
         .filter(|m| {
             let s = m.as_str().trim();
             !s.is_empty()
@@ -145,7 +145,7 @@ fn extract_identifier(cap: &regex::Captures, keywords: &[&str]) -> String {
 /// Extract the last word-like identifier from regex captures.
 fn extract_last_identifier(cap: &regex::Captures) -> String {
     cap.iter()
-        .filter_map(|m| m)
+        .flatten()
         .filter(|m| {
             let s = m.as_str().trim();
             !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_')

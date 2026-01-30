@@ -42,7 +42,7 @@ pub async fn index(State(state): State<Arc<AppState>>) -> Html<String> {
 /// ```
 pub async fn api_graph(State(state): State<Arc<AppState>>) -> Json<GraphData> {
     let kg = state.kg.read().await;
-    let graph_data = GraphBuilder::new().build_from_kg(&*kg).await;
+    let graph_data = GraphBuilder::new().build_from_kg(&kg).await;
     Json(graph_data)
 }
 

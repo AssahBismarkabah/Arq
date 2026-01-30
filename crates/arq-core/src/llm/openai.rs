@@ -35,7 +35,7 @@ impl OpenAIClient {
     /// Creates a new OpenAI-compatible client.
     ///
     /// # Arguments
-    /// * `base_url` - The API base URL (e.g., "https://api.openai.com/v1")
+    /// * `base_url` - The API base URL (e.g., `https://api.openai.com/v1`)
     /// * `api_key` - The API key (can be empty for local providers like Ollama)
     /// * `model` - The model name (e.g., "gpt-4", "llama3", "mistral")
     pub fn new(

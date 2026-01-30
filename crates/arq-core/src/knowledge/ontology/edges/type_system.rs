@@ -136,9 +136,9 @@ pub struct UsesTypeEdge {
     pub usage: TypeUsage,
     /// Whether the type is behind a reference
     pub is_reference: bool,
-    /// Whether the type is optional (Option<T>)
+    /// Whether the type is optional (`Option<T>`)
     pub is_optional: bool,
-    /// Whether the type is in a collection (Vec<T>, etc.)
+    /// Whether the type is in a collection (`Vec<T>`, etc.)
     pub is_collection: bool,
 }
 

@@ -241,8 +241,8 @@ impl<'a> RustVisitor<'a> {
     fn extract_parameters(sig: &Signature) -> Vec<Parameter> {
         sig.inputs
             .iter()
-            .filter_map(|arg| match arg {
-                FnArg::Receiver(r) => Some(Parameter {
+            .map(|arg| match arg {
+                FnArg::Receiver(r) => Parameter {
                     name: "self".to_string(),
                     type_name: if r.reference.is_some() {
                         if r.mutability.is_some() {
@@ -255,7 +255,7 @@ impl<'a> RustVisitor<'a> {
                     },
                     is_mutable: r.mutability.is_some(),
                     is_reference: r.reference.is_some(),
-                }),
+                },
                 FnArg::Typed(t) => {
                     let name = match &*t.pat {
                         Pat::Ident(i) => i.ident.to_string(),
@@ -264,12 +264,12 @@ impl<'a> RustVisitor<'a> {
                     let type_name = quote::quote!(#t.ty).to_string();
                     let is_reference = matches!(&*t.ty, Type::Reference(_));
                     let is_mutable = matches!(&*t.pat, Pat::Ident(i) if i.mutability.is_some());
-                    Some(Parameter {
+                    Parameter {
                         name,
                         type_name,
                         is_mutable,
                         is_reference,
-                    })
+                    }
                 }
             })
             .collect()
@@ -950,7 +950,7 @@ impl Handler for MyStruct {
         let result = parser.parse_file("test.rs", code).unwrap();
 
         // Should have impl + function
-        assert!(result.nodes.len() >= 1);
+        assert!(!result.nodes.is_empty());
         assert!(result
             .nodes
             .iter()
