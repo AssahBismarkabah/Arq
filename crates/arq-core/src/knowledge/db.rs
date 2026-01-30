@@ -209,32 +209,63 @@ impl KnowledgeDb {
 
     /// Create a "contains" relation (file contains struct/function).
     pub async fn relate_contains(&self, file_path: &str, entity_id: &str) -> Result<(), KnowledgeError> {
-        self.db
-            .query("RELATE (SELECT id FROM file WHERE path = $file_path LIMIT 1)->contains->$entity_id")
-            .bind(("file_path", file_path.to_string()))
-            .bind(("entity_id", entity_id.to_string()))
-            .await?;
+        // First find the file record
+        let file: Option<FileNode> = self
+            .db
+            .query("SELECT * FROM file WHERE path = $path LIMIT 1")
+            .bind(("path", file_path.to_string()))
+            .await?
+            .take(0)?;
+
+        if let Some(f) = file {
+            if let Some(file_id) = f.id {
+                let query = format!("RELATE {}->contains->{}", file_id, entity_id);
+                self.db.query(&query).await?;
+            }
+        }
         Ok(())
     }
 
     /// Create a "calls" relation (function calls another function).
     pub async fn relate_calls(&self, caller_id: &str, callee_name: &str) -> Result<(), KnowledgeError> {
-        // Find the callee by name and create relation
-        self.db
-            .query("RELATE $caller_id->calls->(SELECT id FROM fn_node WHERE name = $callee_name LIMIT 1)")
-            .bind(("caller_id", caller_id.to_string()))
-            .bind(("callee_name", callee_name.to_string()))
-            .await?;
+        // First find if the callee exists
+        let callee: Option<super::models::FunctionNode> = self
+            .db
+            .query("SELECT * FROM fn_node WHERE name = $name LIMIT 1")
+            .bind(("name", callee_name.to_string()))
+            .await?
+            .take(0)?;
+
+        // Only create relation if callee exists
+        if let Some(c) = callee {
+            if let Some(callee_id) = c.id {
+                let query = format!("RELATE {}->calls->{}", caller_id, callee_id);
+                self.db.query(&query).await?;
+            }
+        }
         Ok(())
+    }
+
+    /// Count call relations in the database (for debugging).
+    pub async fn count_calls(&self) -> Result<usize, KnowledgeError> {
+        #[derive(serde::Deserialize)]
+        struct CountResult {
+            count: i64,
+        }
+
+        let result: Option<CountResult> = self
+            .db
+            .query("SELECT count() FROM calls GROUP ALL")
+            .await?
+            .take(0)?;
+
+        Ok(result.map(|r| r.count as usize).unwrap_or(0))
     }
 
     /// Create a "has_method" relation (struct has method).
     pub async fn relate_has_method(&self, struct_id: &str, method_id: &str) -> Result<(), KnowledgeError> {
-        self.db
-            .query("RELATE $struct_id->has_method->$method_id")
-            .bind(("struct_id", struct_id.to_string()))
-            .bind(("method_id", method_id.to_string()))
-            .await?;
+        let query = format!("RELATE {}->has_method->{}", struct_id, method_id);
+        self.db.query(&query).await?;
         Ok(())
     }
 
@@ -272,38 +303,48 @@ impl KnowledgeDb {
         Ok(results)
     }
 
-    /// Get entities that the given entity depends on.
+    /// Get entities that the given entity depends on (what it calls).
     pub async fn get_dependencies(&self, entity_id: &str) -> Result<Vec<String>, KnowledgeError> {
-        let entity_id_owned = entity_id.to_string();
-        let results: Vec<String> = self
-            .db
-            .query(
-                r#"
-                SELECT out as dep FROM calls WHERE in = $entity_id
-                "#,
-            )
-            .bind(("entity_id", entity_id_owned))
-            .await?
-            .take(0)?;
+        let query = format!("SELECT out FROM calls WHERE in = {}", entity_id);
 
+        #[derive(serde::Deserialize)]
+        struct DepResult {
+            out: surrealdb::sql::Thing,
+        }
+
+        let results: Vec<DepResult> = self.db.query(&query).await?.take(0)?;
+        Ok(results.into_iter().map(|r| r.out.to_string()).collect())
+    }
+
+    /// Get entities that depend on the given entity (what calls it).
+    pub async fn get_impact(&self, entity_id: &str) -> Result<Vec<String>, KnowledgeError> {
+        let query = format!("SELECT in FROM calls WHERE out = {}", entity_id);
+
+        #[derive(serde::Deserialize)]
+        struct ImpactResult {
+            r#in: surrealdb::sql::Thing,
+        }
+
+        let results: Vec<ImpactResult> = self.db.query(&query).await?.take(0)?;
+        Ok(results.into_iter().map(|r| r.r#in.to_string()).collect())
+    }
+
+    /// List all functions in the database.
+    pub async fn list_functions(&self, limit: usize) -> Result<Vec<super::models::FunctionNode>, KnowledgeError> {
+        let query = format!("SELECT * FROM fn_node LIMIT {}", limit);
+        let results: Vec<super::models::FunctionNode> = self.db.query(&query).await?.take(0)?;
         Ok(results)
     }
 
-    /// Get entities that depend on the given entity (reverse dependencies).
-    pub async fn get_impact(&self, entity_id: &str) -> Result<Vec<String>, KnowledgeError> {
-        let entity_id_owned = entity_id.to_string();
-        let results: Vec<String> = self
+    /// Find a function by name.
+    pub async fn find_function_by_name(&self, name: &str) -> Result<Option<super::models::FunctionNode>, KnowledgeError> {
+        let result: Option<super::models::FunctionNode> = self
             .db
-            .query(
-                r#"
-                SELECT in as caller FROM calls WHERE out = $entity_id
-                "#,
-            )
-            .bind(("entity_id", entity_id_owned))
+            .query("SELECT * FROM fn_node WHERE name = $name LIMIT 1")
+            .bind(("name", name.to_string()))
             .await?
             .take(0)?;
-
-        Ok(results)
+        Ok(result)
     }
 
     /// Get statistics about the indexed data.

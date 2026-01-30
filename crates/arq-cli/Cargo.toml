@@ -12,3 +12,10 @@ path = "src/main.rs"
 arq-core = { path = "../arq-core" }
 clap = { version = "4.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
+
+# TUI dependencies
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+futures = "0.3"
+color-eyre = "0.6"
+chrono = "0.4"

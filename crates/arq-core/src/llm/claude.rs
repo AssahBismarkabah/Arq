@@ -1,12 +1,14 @@
 use async_trait::async_trait;
+use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 use crate::config::{
     DEFAULT_ANTHROPIC_API_VERSION, DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_ANTHROPIC_URL, DEFAULT_MAX_TOKENS,
 };
-use super::{LLMError, LLM};
+use super::{LLMError, LLM, StreamChunk};
 
 /// Claude API client.
 pub struct ClaudeClient {
@@ -108,6 +110,62 @@ impl ClaudeClient {
 
         Ok(text)
     }
+
+    /// Send a streaming request and forward chunks through the channel.
+    async fn send_streaming_request(
+        &self,
+        request: &ClaudeRequest,
+        tx: mpsc::UnboundedSender<StreamChunk>,
+    ) -> Result<(), LLMError> {
+        let response = self
+            .client
+            .post(&self.api_url)
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", &self.api_version)
+            .header("content-type", "application/json")
+            .json(request)
+            .send()
+            .await?;
+
+        let status = response.status();
+
+        if status == 429 {
+            return Err(LLMError::RateLimited);
+        }
+
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(LLMError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        // Process SSE stream
+        let mut stream = response.bytes_stream();
+        let mut buffer = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result.map_err(|e| LLMError::Network(e.to_string()))?;
+            let chunk_str = String::from_utf8_lossy(&chunk);
+            buffer.push_str(&chunk_str);
+
+            // Process complete SSE events from buffer
+            while let Some(pos) = buffer.find("\n\n") {
+                let event_data = buffer[..pos].to_string();
+                buffer = buffer[pos + 2..].to_string();
+
+                // Parse SSE event
+                if let Some(text) = parse_claude_sse_event(&event_data) {
+                    let _ = tx.send(StreamChunk::text(text));
+                }
+            }
+        }
+
+        // Send final chunk
+        let _ = tx.send(StreamChunk::done());
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -121,6 +179,7 @@ impl LLM for ClaudeClient {
                 role: "user".to_string(),
                 content: prompt.to_string(),
             }],
+            stream: None,
         };
 
         self.send_request(&request).await
@@ -139,9 +198,34 @@ impl LLM for ClaudeClient {
                 role: "user".to_string(),
                 content: prompt.to_string(),
             }],
+            stream: None,
         };
 
         self.send_request(&request).await
+    }
+
+    async fn stream_complete(
+        &self,
+        system: &str,
+        prompt: &str,
+        tx: mpsc::UnboundedSender<StreamChunk>,
+    ) -> Result<(), LLMError> {
+        let request = ClaudeRequest {
+            model: self.model.clone(),
+            max_tokens: self.max_tokens,
+            system: Some(system.to_string()),
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            }],
+            stream: Some(true),
+        };
+
+        self.send_streaming_request(&request, tx).await
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
     }
 }
 
@@ -152,6 +236,8 @@ struct ClaudeRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     system: Option<String>,
     messages: Vec<Message>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -171,5 +257,52 @@ struct ContentBlock {
     content_type: String,
     #[serde(default)]
     text: String,
+}
+
+/// Parse a Claude SSE event and extract text from content_block_delta events.
+///
+/// Claude streaming format:
+/// ```text
+/// event: content_block_delta
+/// data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}
+/// ```
+fn parse_claude_sse_event(event_data: &str) -> Option<String> {
+    let mut event_type = None;
+    let mut data_line = None;
+
+    for line in event_data.lines() {
+        if let Some(stripped) = line.strip_prefix("event: ") {
+            event_type = Some(stripped.trim());
+        } else if let Some(stripped) = line.strip_prefix("data: ") {
+            data_line = Some(stripped.trim());
+        }
+    }
+
+    // Only process content_block_delta events
+    if event_type != Some("content_block_delta") {
+        return None;
+    }
+
+    let data = data_line?;
+
+    // Parse the JSON data
+    #[derive(Deserialize)]
+    struct DeltaEvent {
+        delta: Delta,
+    }
+
+    #[derive(Deserialize)]
+    struct Delta {
+        #[serde(default)]
+        text: String,
+    }
+
+    let parsed: DeltaEvent = serde_json::from_str(data).ok()?;
+
+    if parsed.delta.text.is_empty() {
+        None
+    } else {
+        Some(parsed.delta.text)
+    }
 }
 

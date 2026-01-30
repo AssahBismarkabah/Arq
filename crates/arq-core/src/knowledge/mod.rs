@@ -78,6 +78,15 @@ pub trait KnowledgeStore: Send + Sync {
 
     /// Get statistics about the indexed codebase.
     async fn get_stats(&self) -> Result<IndexStats, KnowledgeError>;
+
+    /// List all indexed functions.
+    async fn list_functions(&self, limit: usize) -> Result<Vec<FunctionNode>, KnowledgeError>;
+
+    /// Find a function by name.
+    async fn find_function_by_name(&self, name: &str) -> Result<Option<FunctionNode>, KnowledgeError>;
+
+    /// Count call relations (for debugging).
+    async fn count_calls(&self) -> Result<usize, KnowledgeError>;
 }
 
 /// The main knowledge graph implementation.
@@ -158,5 +167,17 @@ impl KnowledgeStore for KnowledgeGraph {
 
     async fn get_stats(&self) -> Result<IndexStats, KnowledgeError> {
         self.db.get_stats().await
+    }
+
+    async fn list_functions(&self, limit: usize) -> Result<Vec<FunctionNode>, KnowledgeError> {
+        self.db.list_functions(limit).await
+    }
+
+    async fn find_function_by_name(&self, name: &str) -> Result<Option<FunctionNode>, KnowledgeError> {
+        self.db.find_function_by_name(name).await
+    }
+
+    async fn count_calls(&self) -> Result<usize, KnowledgeError> {
+        self.db.count_calls().await
     }
 }

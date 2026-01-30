@@ -1,12 +1,14 @@
 use async_trait::async_trait;
+use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 use crate::config::{
     DEFAULT_MAX_TOKENS, DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_MODEL,
     DEFAULT_OPENAI_URL, DEFAULT_OPENROUTER_URL,
 };
-use super::{LLMError, LLM};
+use super::{LLMError, LLM, StreamChunk};
 
 /// OpenAI-compatible API client.
 ///
@@ -113,6 +115,7 @@ impl OpenAIClient {
             model: self.model.clone(),
             messages: all_messages,
             max_tokens: Some(self.max_tokens),
+            stream: None,
         };
 
         let url = format!("{}/chat/completions", self.base_url);
@@ -157,6 +160,85 @@ impl OpenAIClient {
 
         Ok(content)
     }
+
+    /// Send a streaming request and forward chunks through the channel.
+    async fn send_streaming_request(
+        &self,
+        messages: Vec<ChatMessage>,
+        system: Option<&str>,
+        tx: mpsc::UnboundedSender<StreamChunk>,
+    ) -> Result<(), LLMError> {
+        let mut all_messages = Vec::new();
+
+        // Add system message if provided
+        if let Some(sys) = system {
+            all_messages.push(ChatMessage {
+                role: "system".to_string(),
+                content: sys.to_string(),
+            });
+        }
+
+        all_messages.extend(messages);
+
+        let request = ChatRequest {
+            model: self.model.clone(),
+            messages: all_messages,
+            max_tokens: Some(self.max_tokens),
+            stream: Some(true),
+        };
+
+        let url = format!("{}/chat/completions", self.base_url);
+
+        let mut req = self.client
+            .post(&url)
+            .header("content-type", "application/json");
+
+        // Only add authorization if api_key is not empty
+        if !self.api_key.is_empty() {
+            req = req.header("authorization", format!("Bearer {}", self.api_key));
+        }
+
+        let response = req.json(&request).send().await?;
+
+        let status = response.status();
+
+        if status == 429 {
+            return Err(LLMError::RateLimited);
+        }
+
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(LLMError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        // Process SSE stream
+        let mut stream = response.bytes_stream();
+        let mut buffer = String::new();
+
+        while let Some(chunk_result) = stream.next().await {
+            let chunk = chunk_result.map_err(|e| LLMError::Network(e.to_string()))?;
+            let chunk_str = String::from_utf8_lossy(&chunk);
+            buffer.push_str(&chunk_str);
+
+            // Process complete SSE lines from buffer
+            while let Some(pos) = buffer.find('\n') {
+                let line = buffer[..pos].trim().to_string();
+                buffer = buffer[pos + 1..].to_string();
+
+                // Parse SSE data line
+                if let Some(text) = parse_openai_sse_line(&line) {
+                    let _ = tx.send(StreamChunk::text(text));
+                }
+            }
+        }
+
+        // Send final chunk
+        let _ = tx.send(StreamChunk::done());
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -182,6 +264,24 @@ impl LLM for OpenAIClient {
 
         self.send_request(messages, Some(system)).await
     }
+
+    async fn stream_complete(
+        &self,
+        system: &str,
+        prompt: &str,
+        tx: mpsc::UnboundedSender<StreamChunk>,
+    ) -> Result<(), LLMError> {
+        let messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: prompt.to_string(),
+        }];
+
+        self.send_streaming_request(messages, Some(system), tx).await
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -190,6 +290,8 @@ struct ChatRequest {
     messages: Vec<ChatMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -206,5 +308,48 @@ struct ChatResponse {
 #[derive(Debug, Deserialize)]
 struct Choice {
     message: ChatMessage,
+}
+
+/// Parse an OpenAI SSE line and extract text from delta content.
+///
+/// OpenAI streaming format:
+/// ```text
+/// data: {"id":"...","choices":[{"delta":{"content":"Hello"},"index":0}]}
+/// data: [DONE]
+/// ```
+fn parse_openai_sse_line(line: &str) -> Option<String> {
+    // Skip empty lines and non-data lines
+    let data = line.strip_prefix("data: ")?;
+
+    // Check for end of stream
+    if data == "[DONE]" {
+        return None;
+    }
+
+    // Parse the JSON data
+    #[derive(Deserialize)]
+    struct StreamResponse {
+        choices: Vec<StreamChoice>,
+    }
+
+    #[derive(Deserialize)]
+    struct StreamChoice {
+        delta: Delta,
+    }
+
+    #[derive(Deserialize)]
+    struct Delta {
+        #[serde(default)]
+        content: Option<String>,
+    }
+
+    let parsed: StreamResponse = serde_json::from_str(data).ok()?;
+
+    parsed
+        .choices
+        .into_iter()
+        .next()
+        .and_then(|c| c.delta.content)
+        .filter(|s| !s.is_empty())
 }
 

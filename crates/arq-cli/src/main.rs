@@ -5,6 +5,8 @@ use arq_core::{
 };
 use std::path::Path;
 
+mod tui;
+
 #[derive(Parser)]
 #[command(name = "arq")]
 #[command(about = "Spec-driven AI coding tool", long_about = None)]
@@ -56,6 +58,34 @@ enum Commands {
     },
     /// Show knowledge graph statistics
     KgStatus,
+    /// Query graph relationships (dependencies and impact)
+    Graph {
+        #[command(subcommand)]
+        action: GraphAction,
+    },
+    /// Launch interactive TUI chat interface
+    #[command(alias = "ui")]
+    Tui,
+}
+
+#[derive(Subcommand)]
+enum GraphAction {
+    /// Show what a function depends on (calls)
+    Deps {
+        /// Function name to look up
+        name: String,
+    },
+    /// Show what depends on a function (callers / impact)
+    Impact {
+        /// Function name to look up
+        name: String,
+    },
+    /// List all indexed functions
+    Functions {
+        /// Maximum number to show
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+    },
 }
 
 #[tokio::main]
@@ -358,16 +388,117 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let kg = KnowledgeGraph::open(&db_path).await?;
             let stats: IndexStats = kg.get_stats().await?;
 
+            let calls_count = kg.count_calls().await.unwrap_or(0);
+
             println!("Knowledge Graph Status\n");
             println!("  Files indexed: {}", stats.files);
             println!("  Structs: {}", stats.structs);
             println!("  Functions: {}", stats.functions);
+            println!("  Call relations: {}", calls_count);
             println!("  Code chunks: {}", stats.chunks);
             println!("  Total size: {} KB", stats.total_size / 1024);
             if let Some(ref updated) = stats.last_updated {
                 println!("  Last updated: {}", updated.format("%Y-%m-%d %H:%M"));
             }
             println!("\nDatabase path: {}", db_path.display());
+        }
+        Commands::Graph { action } => {
+            let db_path = config.knowledge.db_full_path(&config.storage);
+
+            if !db_path.exists() {
+                return Err("Knowledge graph not initialized. Run 'arq init' first.".into());
+            }
+
+            let kg = KnowledgeGraph::open(&db_path).await?;
+
+            match action {
+                GraphAction::Deps { name } => {
+                    println!("Dependencies for '{}'\n", name);
+
+                    // Find function by name first
+                    let func = kg.find_function_by_name(&name).await?;
+
+                    match func {
+                        Some(f) => {
+                            let entity_id = f.id
+                                .map(|id| id.to_string())
+                                .unwrap_or_else(|| format!("fn_node:{}", name));
+
+                            let deps = kg.get_dependencies(&entity_id).await?;
+
+                            if deps.is_empty() {
+                                println!("'{}' has no outgoing calls recorded.", name);
+                                println!("  Location: {}:{}", f.file_path, f.start_line);
+                            } else {
+                                println!("'{}' calls:", name);
+                                for dep in &deps {
+                                    println!("  → {}", dep);
+                                }
+                            }
+                        }
+                        None => {
+                            println!("Function '{}' not found in the index.", name);
+                            println!("\nTip: Use 'arq graph functions' to list indexed functions.");
+                        }
+                    }
+                }
+                GraphAction::Impact { name } => {
+                    println!("Impact analysis for '{}'\n", name);
+
+                    // Find function by name first
+                    let func = kg.find_function_by_name(&name).await?;
+
+                    match func {
+                        Some(f) => {
+                            let entity_id = f.id
+                                .map(|id| id.to_string())
+                                .unwrap_or_else(|| format!("fn_node:{}", name));
+
+                            let callers = kg.get_impact(&entity_id).await?;
+
+                            if callers.is_empty() {
+                                println!("'{}' has no incoming calls recorded.", name);
+                                println!("  Location: {}:{}", f.file_path, f.start_line);
+                            } else {
+                                println!("'{}' is called by:", name);
+                                for caller in &callers {
+                                    println!("  ← {}", caller);
+                                }
+                            }
+                        }
+                        None => {
+                            println!("Function '{}' not found in the index.", name);
+                            println!("\nTip: Use 'arq graph functions' to list indexed functions.");
+                        }
+                    }
+                }
+                GraphAction::Functions { limit } => {
+                    println!("Indexed functions (showing up to {}):\n", limit);
+
+                    let functions = kg.list_functions(limit).await?;
+
+                    if functions.is_empty() {
+                        println!("  No functions indexed yet.");
+                    } else {
+                        for f in &functions {
+                            let visibility = if f.visibility == "public" { "pub " } else { "" };
+                            let async_marker = if f.is_async { "async " } else { "" };
+                            println!(
+                                "  {}{}fn {} ({}:{})",
+                                visibility,
+                                async_marker,
+                                f.name,
+                                f.file_path,
+                                f.start_line
+                            );
+                        }
+                        println!("\n  Total: {} functions", functions.len());
+                    }
+                }
+            }
+        }
+        Commands::Tui => {
+            tui::run(config, manager).await?;
         }
     }
 

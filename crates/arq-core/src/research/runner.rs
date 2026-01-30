@@ -1,12 +1,34 @@
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::mpsc;
 
 use crate::context::{ContextBuilder, ContextError};
 use crate::knowledge::{KnowledgeError, KnowledgeStore, SearchResult};
-use crate::llm::{LLMError, LLM};
+use crate::llm::{LLMError, LLM, StreamChunk};
 use crate::research::document::{Dependency, Finding, ResearchDoc, Source, SourceType};
 use crate::research::prompts::{build_research_prompt, RESEARCH_SYSTEM_PROMPT};
 use crate::Task;
+
+/// Progress events during research.
+#[derive(Debug, Clone)]
+pub enum ResearchProgress {
+    /// Research has started
+    Started,
+    /// Gathering context from codebase
+    GatheringContext,
+    /// Searching knowledge graph
+    SearchingKnowledgeGraph,
+    /// Found results from knowledge graph
+    KnowledgeGraphResults { count: usize },
+    /// Calling LLM for analysis
+    CallingLLM,
+    /// Parsing the LLM response
+    ParsingResponse,
+    /// Research completed successfully
+    Complete,
+    /// An error occurred
+    Error(String),
+}
 
 /// Runs the research phase for a task.
 pub struct ResearchRunner<L: LLM> {
@@ -71,14 +93,153 @@ impl<L: LLM> ResearchRunner<L> {
         Ok(doc)
     }
 
+    /// Runs research with progress callbacks.
+    ///
+    /// Sends progress updates through the provided channel as research proceeds.
+    pub async fn run_with_progress(
+        &self,
+        task: &Task,
+        progress_tx: mpsc::UnboundedSender<ResearchProgress>,
+    ) -> Result<ResearchDoc, ResearchError> {
+        let _ = progress_tx.send(ResearchProgress::Started);
+
+        // 1. Gather context
+        let (context_str, sources) = if let Some(ref kg) = self.knowledge_store {
+            let _ = progress_tx.send(ResearchProgress::SearchingKnowledgeGraph);
+            let result = self.gather_smart_context(kg, &task.prompt).await?;
+            // Count sources for progress
+            let count = result.1.len();
+            let _ = progress_tx.send(ResearchProgress::KnowledgeGraphResults { count });
+            result
+        } else {
+            let _ = progress_tx.send(ResearchProgress::GatheringContext);
+            let context = self.context_builder.gather()?;
+            let sources: Vec<Source> = context
+                .files
+                .iter()
+                .map(|f| Source {
+                    source_type: SourceType::File,
+                    location: f.path.clone(),
+                })
+                .collect();
+            (context.to_prompt_string(), sources)
+        };
+
+        // 2. Build prompt
+        let prompt = build_research_prompt(&task.prompt, &context_str);
+
+        // 3. Call LLM
+        let _ = progress_tx.send(ResearchProgress::CallingLLM);
+        let response = self
+            .llm
+            .complete_with_system(RESEARCH_SYSTEM_PROMPT, &prompt)
+            .await?;
+
+        // 4. Parse response
+        let _ = progress_tx.send(ResearchProgress::ParsingResponse);
+        let doc = self.parse_response(&task.name, &response, sources)?;
+
+        let _ = progress_tx.send(ResearchProgress::Complete);
+        Ok(doc)
+    }
+
+    /// Runs research with streaming LLM output and progress callbacks.
+    ///
+    /// This method streams LLM tokens as they arrive while also sending progress updates.
+    pub async fn run_streaming(
+        &self,
+        task: &Task,
+        progress_tx: mpsc::UnboundedSender<ResearchProgress>,
+        stream_tx: mpsc::UnboundedSender<StreamChunk>,
+    ) -> Result<ResearchDoc, ResearchError> {
+        let _ = progress_tx.send(ResearchProgress::Started);
+
+        // 1. Gather context
+        let (context_str, sources) = if let Some(ref kg) = self.knowledge_store {
+            let _ = progress_tx.send(ResearchProgress::SearchingKnowledgeGraph);
+            let result = self.gather_smart_context(kg, &task.prompt).await?;
+            let count = result.1.len();
+            let _ = progress_tx.send(ResearchProgress::KnowledgeGraphResults { count });
+            result
+        } else {
+            let _ = progress_tx.send(ResearchProgress::GatheringContext);
+            let context = self.context_builder.gather()?;
+            let sources: Vec<Source> = context
+                .files
+                .iter()
+                .map(|f| Source {
+                    source_type: SourceType::File,
+                    location: f.path.clone(),
+                })
+                .collect();
+            (context.to_prompt_string(), sources)
+        };
+
+        // 2. Build prompt
+        let prompt = build_research_prompt(&task.prompt, &context_str);
+
+        // 3. Stream LLM response
+        let _ = progress_tx.send(ResearchProgress::CallingLLM);
+
+        // Collect streamed response
+        let response = if self.llm.supports_streaming() {
+            // Use streaming - collect chunks while forwarding to stream_tx
+            let (collector_tx, mut collector_rx) = mpsc::unbounded_channel::<StreamChunk>();
+
+            // Spawn task to forward chunks and collect full response
+            let stream_tx_clone = stream_tx.clone();
+            let collect_handle = tokio::spawn(async move {
+                let mut full_response = String::new();
+                while let Some(chunk) = collector_rx.recv().await {
+                    if !chunk.is_final {
+                        full_response.push_str(&chunk.text);
+                    }
+                    // Forward to TUI
+                    let _ = stream_tx_clone.send(chunk);
+                }
+                full_response
+            });
+
+            // Start streaming
+            self.llm
+                .stream_complete(RESEARCH_SYSTEM_PROMPT, &prompt, collector_tx)
+                .await?;
+
+            // Wait for collection to complete
+            collect_handle.await.unwrap_or_default()
+        } else {
+            // Non-streaming fallback
+            let response = self
+                .llm
+                .complete_with_system(RESEARCH_SYSTEM_PROMPT, &prompt)
+                .await?;
+            // Send as single chunk
+            let _ = stream_tx.send(StreamChunk::text(response.clone()));
+            let _ = stream_tx.send(StreamChunk::done());
+            response
+        };
+
+        // 4. Parse response
+        let _ = progress_tx.send(ResearchProgress::ParsingResponse);
+        let doc = self.parse_response(&task.name, &response, sources)?;
+
+        let _ = progress_tx.send(ResearchProgress::Complete);
+        Ok(doc)
+    }
+
     /// Gathers smart context using the knowledge graph.
+    ///
+    /// This method:
+    /// 1. Performs semantic search to find relevant code
+    /// 2. Expands results using graph traversal (dependencies & impact)
+    /// 3. Builds rich context showing code AND its connections
     async fn gather_smart_context(
         &self,
         kg: &Arc<dyn KnowledgeStore>,
         query: &str,
     ) -> Result<(String, Vec<Source>), ResearchError> {
-        // Search for relevant code chunks
-        let results: Vec<SearchResult> = kg.search_code(query, 20).await?;
+        // 1. Semantic search to find relevant code chunks
+        let results: Vec<SearchResult> = kg.search_code(query, 15).await?;
 
         if results.is_empty() {
             // Fall back to regular context gathering if no results
@@ -94,12 +255,14 @@ impl<L: LLM> ResearchRunner<L> {
             return Ok((context.to_prompt_string(), sources));
         }
 
-        // Build context from search results
         let mut context_parts = Vec::new();
         let mut sources = Vec::new();
         let mut seen_files = std::collections::HashSet::new();
+        let mut graph_context = Vec::new();
 
+        // 2. Process search results and gather graph connections
         for result in &results {
+            // Track source files
             if !seen_files.contains(&result.path) {
                 seen_files.insert(result.path.clone());
                 sources.push(Source {
@@ -111,18 +274,57 @@ impl<L: LLM> ResearchRunner<L> {
                 });
             }
 
+            // Add code preview
             if let Some(ref preview) = result.preview {
                 context_parts.push(format!(
-                    "# {} (lines {}-{})\n```\n{}\n```",
+                    "### {} (lines {}-{})\n```\n{}\n```",
                     result.path, result.start_line, result.end_line, preview
                 ));
             }
+
+            // 3. Graph expansion - get dependencies and impact for entities
+            if let Some(ref entity_id) = result.entity_id {
+                let entity_name = &result.entity_type;
+
+                // Get what this entity depends on (calls)
+                if let Ok(deps) = kg.get_dependencies(entity_id).await {
+                    if !deps.is_empty() {
+                        graph_context.push(format!(
+                            "- **{}** `{}` calls: {}",
+                            entity_name,
+                            entity_id,
+                            deps.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
+                        ));
+                    }
+                }
+
+                // Get what depends on this entity (callers / impact)
+                if let Ok(impact) = kg.get_impact(entity_id).await {
+                    if !impact.is_empty() {
+                        graph_context.push(format!(
+                            "- **{}** `{}` is called by: {}",
+                            entity_name,
+                            entity_id,
+                            impact.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
+                        ));
+                    }
+                }
+            }
         }
 
-        let context_str = format!(
-            "## Relevant Code (via semantic search)\n\n{}\n",
+        // 4. Build final context string
+        let mut context_str = format!(
+            "## Relevant Code (semantic search)\n\n{}\n",
             context_parts.join("\n\n")
         );
+
+        // Add graph relationships if found
+        if !graph_context.is_empty() {
+            context_str.push_str(&format!(
+                "\n## Code Relationships (graph analysis)\n\n{}\n",
+                graph_context.join("\n")
+            ));
+        }
 
         Ok((context_str, sources))
     }
