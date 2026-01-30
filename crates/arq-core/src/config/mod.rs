@@ -168,7 +168,10 @@ impl Default for ContextConfig {
             max_total_size: DEFAULT_MAX_TOTAL_SIZE,
             include_extensions: DEFAULT_EXTENSIONS.iter().map(|s| s.to_string()).collect(),
             exclude_dirs: DEFAULT_EXCLUDE_DIRS.iter().map(|s| s.to_string()).collect(),
-            exclude_patterns: DEFAULT_EXCLUDE_PATTERNS.iter().map(|s| s.to_string()).collect(),
+            exclude_patterns: DEFAULT_EXCLUDE_PATTERNS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         }
     }
 }
@@ -205,9 +208,9 @@ impl Default for LLMConfig {
     fn default() -> Self {
         Self {
             provider: DEFAULT_LLM_PROVIDER.to_string(),
-            model: None, // Use provider default
+            model: None,    // Use provider default
             base_url: None, // Use provider default
-            api_key: None, // Load from env
+            api_key: None,  // Load from env
             max_tokens: DEFAULT_MAX_TOKENS,
             api_version: Some(DEFAULT_ANTHROPIC_API_VERSION.to_string()),
             available_models: Vec::new(),
@@ -218,30 +221,31 @@ impl Default for LLMConfig {
 impl LLMConfig {
     /// Get the model name, falling back to provider defaults.
     pub fn model_or_default(&self) -> String {
-        self.model.clone().unwrap_or_else(|| {
-            match self.provider.as_str() {
+        self.model
+            .clone()
+            .unwrap_or_else(|| match self.provider.as_str() {
                 "anthropic" | "claude" => DEFAULT_ANTHROPIC_MODEL.to_string(),
                 "ollama" => DEFAULT_OLLAMA_MODEL.to_string(),
                 _ => DEFAULT_OPENAI_MODEL.to_string(),
-            }
-        })
+            })
     }
 
     /// Get the base URL, falling back to provider defaults.
     pub fn base_url_or_default(&self) -> String {
-        self.base_url.clone().unwrap_or_else(|| {
-            match self.provider.as_str() {
+        self.base_url
+            .clone()
+            .unwrap_or_else(|| match self.provider.as_str() {
                 "anthropic" | "claude" => DEFAULT_ANTHROPIC_URL.to_string(),
                 "ollama" => DEFAULT_OLLAMA_URL.to_string(),
                 "openrouter" => DEFAULT_OPENROUTER_URL.to_string(),
                 _ => DEFAULT_OPENAI_URL.to_string(),
-            }
-        })
+            })
     }
 
     /// Get API key from config or environment.
     pub fn api_key_or_env(&self) -> Option<String> {
-        self.api_key.clone()
+        self.api_key
+            .clone()
             .or_else(|| std::env::var("ARQ_LLM_API_KEY").ok())
             .or_else(|| match self.provider.as_str() {
                 "anthropic" | "claude" => std::env::var("ANTHROPIC_API_KEY").ok(),
@@ -308,9 +312,10 @@ impl StorageConfig {
     /// Get the local .arq directory in the current project.
     /// This is where user-visible outputs (research-doc.md, plan.yaml) are stored.
     pub fn local_arq_dir(&self) -> PathBuf {
-        let root = self.project_root.clone().unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        });
+        let root = self
+            .project_root
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
         root.join(".arq")
     }
 
@@ -327,8 +332,7 @@ impl StorageConfig {
     fn compute_project_hash() -> String {
         use sha2::{Digest, Sha256};
 
-        let cwd = std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."));
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let canonical = cwd.canonicalize().unwrap_or(cwd);
 
         let mut hasher = Sha256::new();
@@ -423,4 +427,3 @@ impl KnowledgeConfig {
         storage_config.project_dir().join(&self.db_path)
     }
 }
-

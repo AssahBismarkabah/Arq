@@ -2,7 +2,7 @@
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, BorderType, List, ListItem},
+    widgets::{Block, BorderType, Borders, List, ListItem},
 };
 
 use crate::tui::app::{App, ProgressStatus};

@@ -49,4 +49,3 @@ impl Default for Phase {
         Phase::Research
     }
 }
-

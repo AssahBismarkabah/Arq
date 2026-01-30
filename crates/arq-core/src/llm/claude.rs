@@ -4,11 +4,11 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use super::{LLMError, StreamChunk, LLM};
 use crate::config::{
-    DEFAULT_ANTHROPIC_API_VERSION, DEFAULT_ANTHROPIC_MODEL,
-    DEFAULT_ANTHROPIC_URL, DEFAULT_MAX_TOKENS,
+    DEFAULT_ANTHROPIC_API_VERSION, DEFAULT_ANTHROPIC_MODEL, DEFAULT_ANTHROPIC_URL,
+    DEFAULT_MAX_TOKENS,
 };
-use super::{LLMError, LLM, StreamChunk};
 
 /// Claude API client.
 pub struct ClaudeClient {
@@ -35,8 +35,7 @@ impl ClaudeClient {
 
     /// Creates a Claude client from the ANTHROPIC_API_KEY environment variable.
     pub fn from_env() -> Result<Self, LLMError> {
-        let api_key =
-            std::env::var("ANTHROPIC_API_KEY").map_err(|_| LLMError::MissingApiKey)?;
+        let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| LLMError::MissingApiKey)?;
         Ok(Self::new(api_key))
     }
 
@@ -185,11 +184,7 @@ impl LLM for ClaudeClient {
         self.send_request(&request).await
     }
 
-    async fn complete_with_system(
-        &self,
-        system: &str,
-        prompt: &str,
-    ) -> Result<String, LLMError> {
+    async fn complete_with_system(&self, system: &str, prompt: &str) -> Result<String, LLMError> {
         let request = ClaudeRequest {
             model: self.model.clone(),
             max_tokens: self.max_tokens,
@@ -305,4 +300,3 @@ fn parse_claude_sse_event(event_data: &str) -> Option<String> {
         Some(parsed.delta.text)
     }
 }
-

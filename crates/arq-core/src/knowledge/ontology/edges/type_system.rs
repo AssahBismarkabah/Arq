@@ -259,7 +259,11 @@ pub struct HasFieldEdge {
 }
 
 impl HasFieldEdge {
-    pub fn new(from: impl Into<String>, to: impl Into<String>, field_name: impl Into<String>) -> Self {
+    pub fn new(
+        from: impl Into<String>,
+        to: impl Into<String>,
+        field_name: impl Into<String>,
+    ) -> Self {
         Self {
             from: from.into(),
             to: to.into(),

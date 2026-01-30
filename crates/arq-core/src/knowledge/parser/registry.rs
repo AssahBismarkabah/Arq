@@ -66,10 +66,7 @@ impl ParserRegistry {
 
     /// List all supported extensions.
     pub fn supported_extensions(&self) -> Vec<&str> {
-        self.parsers
-            .keys()
-            .map(|s| s.as_str())
-            .collect()
+        self.parsers.keys().map(|s| s.as_str()).collect()
     }
 
     /// List all registered parsers with their languages.

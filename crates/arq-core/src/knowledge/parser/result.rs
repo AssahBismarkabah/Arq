@@ -1,12 +1,11 @@
 //! Parse result types containing extracted ontology entities.
 
 use crate::knowledge::ontology::edges::{
-    CallsEdge, ContainsEdge, ExtendsEdge, HasFieldEdge, ImplementsEdge,
-    ImportsEdge, ReturnsTypeEdge, UsesTypeEdge,
+    CallsEdge, ContainsEdge, ExtendsEdge, HasFieldEdge, ImplementsEdge, ImportsEdge,
+    ReturnsTypeEdge, UsesTypeEdge,
 };
 use crate::knowledge::ontology::nodes::{
-    ConstantEntity, EnumEntity, FunctionEntity, ImplEntity,
-    StructEntity, TraitEntity,
+    ConstantEntity, EnumEntity, FunctionEntity, ImplEntity, StructEntity, TraitEntity,
 };
 
 /// Result of parsing a source file.

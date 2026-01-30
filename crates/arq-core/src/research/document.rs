@@ -52,8 +52,15 @@ impl ResearchDoc {
 
         md.push_str("## Dependencies\n\n");
         for dep in &self.dependencies {
-            let dep_type = if dep.is_external { "external" } else { "internal" };
-            md.push_str(&format!("- **{}** ({}): {}\n", dep.name, dep_type, dep.description));
+            let dep_type = if dep.is_external {
+                "external"
+            } else {
+                "internal"
+            };
+            md.push_str(&format!(
+                "- **{}** ({}): {}\n",
+                dep.name, dep_type, dep.description
+            ));
         }
         md.push_str("\n");
 
@@ -63,7 +70,11 @@ impl ResearchDoc {
 
         md.push_str("## Sources\n\n");
         for source in &self.sources {
-            md.push_str(&format!("- {}: {}\n", source.source_type.as_str(), source.location));
+            md.push_str(&format!(
+                "- {}: {}\n",
+                source.source_type.as_str(),
+                source.location
+            ));
         }
 
         md
@@ -130,4 +141,3 @@ impl SourceType {
         }
     }
 }
-

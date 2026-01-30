@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use super::extractor::{extract_calls, extract_functions, extract_line_range, extract_structs};
-use super::patterns::{DEFAULT_EXTENSIONS, MAX_CHUNK_SIZE, CHUNK_OVERLAP};
+use super::patterns::{CHUNK_OVERLAP, DEFAULT_EXTENSIONS, MAX_CHUNK_SIZE};
 use super::Indexer;
 use crate::knowledge::db::KnowledgeDb;
 use crate::knowledge::embedder::Embedder;
@@ -151,7 +151,10 @@ impl GenericIndexer {
                     }
                     Err(e) => {
                         // Log warning and fall back to regex
-                        eprintln!("Warning: Rich parsing failed for {}: {}, falling back to regex", path, e);
+                        eprintln!(
+                            "Warning: Rich parsing failed for {}: {}, falling back to regex",
+                            path, e
+                        );
                     }
                 }
             }
@@ -206,7 +209,11 @@ impl GenericIndexer {
     }
 
     /// Legacy regex-based entity extraction.
-    async fn index_code_entities_legacy(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
+    async fn index_code_entities_legacy(
+        &self,
+        path: &str,
+        content: &str,
+    ) -> Result<(), KnowledgeError> {
         let structs = extract_structs(content, path);
         let functions = extract_functions(content, path);
 
@@ -263,10 +270,7 @@ impl Indexer for GenericIndexer {
     async fn index_directory(&self, path: &Path) -> Result<IndexStats, KnowledgeError> {
         let mut stats = IndexStats::default();
 
-        let walker = WalkBuilder::new(path)
-            .hidden(true)
-            .git_ignore(true)
-            .build();
+        let walker = WalkBuilder::new(path).hidden(true).git_ignore(true).build();
 
         for entry in walker.flatten() {
             let file_path = entry.path();

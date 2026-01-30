@@ -119,4 +119,3 @@ pub enum ManagerError {
     #[error("Cannot advance from {phase:?}: {reason}")]
     CannotAdvance { phase: Phase, reason: String },
 }
-

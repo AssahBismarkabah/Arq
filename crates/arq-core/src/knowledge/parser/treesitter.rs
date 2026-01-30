@@ -14,17 +14,27 @@ pub struct TreeSitterParser {
 }
 
 impl TreeSitterParser {
-    pub fn new(language: Language, language_name: &'static str, extensions: &'static [&'static str]) -> Self {
-        Self { language, language_name, extensions }
+    pub fn new(
+        language: Language,
+        language_name: &'static str,
+        extensions: &'static [&'static str],
+    ) -> Self {
+        Self {
+            language,
+            language_name,
+            extensions,
+        }
     }
 
     /// Parse source code into a tree-sitter tree.
     pub fn parse_tree(&self, content: &str) -> Result<Tree, String> {
         let mut parser = TSParser::new();
-        parser.set_language(&self.language)
+        parser
+            .set_language(&self.language)
             .map_err(|e| format!("Failed to set language: {}", e))?;
 
-        parser.parse(content, None)
+        parser
+            .parse(content, None)
             .ok_or_else(|| "Failed to parse content".to_string())
     }
 
@@ -64,7 +74,9 @@ impl TreeSitterParser {
         let loc = (node.end_position().row - node.start_position().row + 1) as u32;
 
         // Simple cyclomatic complexity estimation
-        let branching = ["if", "else", "for", "while", "switch", "case", "catch", "?", "&&", "||"];
+        let branching = [
+            "if", "else", "for", "while", "switch", "case", "catch", "?", "&&", "||",
+        ];
         let mut cyclomatic = 1u32;
         for keyword in branching {
             cyclomatic += text.matches(keyword).count() as u32;

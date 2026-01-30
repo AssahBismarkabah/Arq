@@ -15,35 +15,67 @@ pub const DEFAULT_MAX_TOTAL_SIZE: u64 = 500 * 1024;
 /// Default file extensions to include in context gathering.
 pub const DEFAULT_EXTENSIONS: &[&str] = &[
     // Rust
-    "rs", "toml",
+    "rs",
+    "toml",
     // JavaScript/TypeScript
-    "js", "ts", "jsx", "tsx", "mjs", "cjs",
+    "js",
+    "ts",
+    "jsx",
+    "tsx",
+    "mjs",
+    "cjs",
     // Python
-    "py", "pyi",
+    "py",
+    "pyi",
     // Go
-    "go", "mod", "sum",
+    "go",
+    "mod",
+    "sum",
     // Java/Kotlin
-    "java", "kt", "kts",
+    "java",
+    "kt",
+    "kts",
     // C/C++
-    "c", "h", "cpp", "hpp", "cc", "hh",
+    "c",
+    "h",
+    "cpp",
+    "hpp",
+    "cc",
+    "hh",
     // C#
-    "cs", "csproj",
+    "cs",
+    "csproj",
     // Ruby
-    "rb", "rake", "gemspec",
+    "rb",
+    "rake",
+    "gemspec",
     // PHP
     "php",
     // Swift
     "swift",
     // Web
-    "html", "css", "scss", "sass", "less",
+    "html",
+    "css",
+    "scss",
+    "sass",
+    "less",
     // Config/Data
-    "json", "yaml", "yml", "xml",
+    "json",
+    "yaml",
+    "yml",
+    "xml",
     // Shell
-    "sh", "bash", "zsh",
+    "sh",
+    "bash",
+    "zsh",
     // Documentation
-    "md", "txt", "rst",
+    "md",
+    "txt",
+    "rst",
     // Build files
-    "Makefile", "Dockerfile", "Containerfile",
+    "Makefile",
+    "Dockerfile",
+    "Containerfile",
 ];
 
 /// Default directories to exclude from context gathering.

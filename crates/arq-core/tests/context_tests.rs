@@ -38,7 +38,10 @@ fn test_excluded_directories() {
 
     // Should include index.js but not node_modules/test.js
     assert!(context.files.iter().any(|f| f.path == "index.js"));
-    assert!(!context.files.iter().any(|f| f.path.contains("node_modules")));
+    assert!(!context
+        .files
+        .iter()
+        .any(|f| f.path.contains("node_modules")));
 }
 
 #[test]

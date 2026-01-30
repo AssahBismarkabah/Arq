@@ -16,14 +16,14 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
             Block::default()
                 .title(" Arq ")
                 .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::DarkGray))
+                .border_style(Style::default().fg(Color::DarkGray)),
         )
         .select(app.selected_tab.index())
         .style(Style::default().fg(Color::DarkGray))
         .highlight_style(
             Style::default()
                 .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         )
         .divider(" | ");
 

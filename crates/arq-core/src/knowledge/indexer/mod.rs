@@ -5,7 +5,7 @@ mod generic;
 mod patterns;
 
 pub use generic::GenericIndexer;
-pub use patterns::{DEFAULT_EXTENSIONS, MAX_CHUNK_SIZE, CHUNK_OVERLAP};
+pub use patterns::{CHUNK_OVERLAP, DEFAULT_EXTENSIONS, MAX_CHUNK_SIZE};
 
 use async_trait::async_trait;
 use std::path::Path;

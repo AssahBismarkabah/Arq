@@ -1,9 +1,6 @@
 //! UI rendering for the TUI.
 
-use ratatui::{
-    prelude::*,
-    widgets::Paragraph,
-};
+use ratatui::{prelude::*, widgets::Paragraph};
 
 use super::app::{App, InputMode, ResearchState};
 use super::components::{chat, input, progress, tabs};
@@ -16,10 +13,10 @@ pub fn render(app: &App, frame: &mut Frame) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Tab bar
-            Constraint::Min(10),    // Main content
-            Constraint::Length(3),  // Input
-            Constraint::Length(1),  // Status bar
+            Constraint::Length(3), // Tab bar
+            Constraint::Min(10),   // Main content
+            Constraint::Length(3), // Input
+            Constraint::Length(1), // Status bar
         ])
         .split(area);
 
@@ -41,8 +38,8 @@ fn render_main_content(app: &App, frame: &mut Frame, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(70),  // Chat
-            Constraint::Percentage(30),  // Progress
+            Constraint::Percentage(70), // Chat
+            Constraint::Percentage(30), // Progress
         ])
         .split(area);
 
@@ -78,14 +75,15 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
     );
 
     // Show status_message if present, otherwise show task_info
-    let right_side = app.status_message.as_ref()
+    let right_side = app
+        .status_message
+        .as_ref()
         .map(|s| s.as_str())
         .unwrap_or(&task_info);
 
     let status = format!("{}  |  {}  |  {}", mode_str, model_info, right_side);
 
-    let status_bar = Paragraph::new(status)
-        .style(Style::default().fg(Color::DarkGray));
+    let status_bar = Paragraph::new(status).style(Style::default().fg(Color::DarkGray));
 
     frame.render_widget(status_bar, area);
 }

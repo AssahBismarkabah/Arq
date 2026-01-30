@@ -17,11 +17,11 @@
 //! - Composable types for rich graph queries
 //! - Extensible without breaking existing code
 
-pub mod nodes;
 pub mod edges;
+pub mod nodes;
 
-pub use nodes::*;
 pub use edges::*;
+pub use nodes::*;
 
 use serde::{Deserialize, Serialize};
 

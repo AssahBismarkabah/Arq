@@ -1,4 +1,4 @@
-use arq_core::{FileStorage, StorageConfig, TaskManager, Phase, ResearchDoc};
+use arq_core::{FileStorage, Phase, ResearchDoc, StorageConfig, TaskManager};
 use tempfile::TempDir;
 
 fn create_test_manager() -> (TaskManager<FileStorage>, TempDir) {

@@ -1,8 +1,8 @@
-use clap::{Parser, Subcommand};
 use arq_core::{
-    Config, ContextBuilder, FileStorage, IndexStats, KnowledgeGraph, KnowledgeStore,
-    Phase, Provider, ResearchRunner, SearchResult, TaskManager,
+    Config, ContextBuilder, FileStorage, IndexStats, KnowledgeGraph, KnowledgeStore, Phase,
+    Provider, ResearchRunner, SearchResult, TaskManager,
 };
+use clap::{Parser, Subcommand};
 use std::path::Path;
 
 mod serve;
@@ -260,11 +260,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let runner = if db_path.exists() {
                 println!("Using knowledge graph for smart context...");
                 let kg = KnowledgeGraph::open(&db_path).await?;
-                ResearchRunner::with_knowledge_store(
-                    llm,
-                    context_builder,
-                    std::sync::Arc::new(kg),
-                )
+                ResearchRunner::with_knowledge_store(llm, context_builder, std::sync::Arc::new(kg))
             } else {
                 println!("Scanning codebase (run 'arq init' for faster semantic search)...");
                 ResearchRunner::new(llm, context_builder)
@@ -307,10 +303,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let new_phase = manager.advance_phase(&task.id)?;
-            println!(
-                "Advanced to {} phase.",
-                new_phase.display_name()
-            );
+            println!("Advanced to {} phase.", new_phase.display_name());
         }
         Commands::Init { force } => {
             let db_path = config.knowledge.db_full_path(&config.storage);
@@ -493,11 +486,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                             let async_marker = if f.is_async { "async " } else { "" };
                             println!(
                                 "  {}{}fn {} ({}:{})",
-                                visibility,
-                                async_marker,
-                                f.name,
-                                f.file_path,
-                                f.start_line
+                                visibility, async_marker, f.name, f.file_path, f.start_line
                             );
                         }
                         println!("\n  Total: {} functions", functions.len());

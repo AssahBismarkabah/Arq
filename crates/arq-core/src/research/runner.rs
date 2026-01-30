@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use crate::context::{ContextBuilder, ContextError};
 use crate::knowledge::{KnowledgeError, KnowledgeStore, SearchResult};
-use crate::llm::{LLMError, LLM, StreamChunk};
+use crate::llm::{LLMError, StreamChunk, LLM};
 use crate::research::document::{Dependency, Finding, ResearchDoc, Source, SourceType};
 use crate::research::prompts::{build_research_prompt, RESEARCH_SYSTEM_PROMPT};
 use crate::Task;
@@ -305,7 +305,12 @@ impl<L: LLM> ResearchRunner<L> {
                             "- **{}** `{}` is called by: {}",
                             entity_name,
                             entity_id,
-                            impact.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
+                            impact
+                                .iter()
+                                .take(5)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         ));
                     }
                 }
@@ -450,4 +455,3 @@ pub enum ResearchError {
     #[error("Parse error: {0}")]
     ParseError(String),
 }
-

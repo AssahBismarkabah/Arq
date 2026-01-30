@@ -5,10 +5,10 @@ use tree_sitter::Node;
 use super::result::ParseResult;
 use super::traits::{Parser, ParserCapability};
 use super::treesitter::TreeSitterParser;
-use crate::knowledge::ontology::edges::{CallsEdge, CallType, ContainsEdge};
+use crate::knowledge::ontology::edges::{CallType, CallsEdge, ContainsEdge};
 use crate::knowledge::ontology::nodes::{
-    EnumEntity, EnumVariant, FunctionEntity, StructEntity, TraitEntity,
-    Visibility, FieldInfo, Parameter,
+    EnumEntity, EnumVariant, FieldInfo, FunctionEntity, Parameter, StructEntity, TraitEntity,
+    Visibility,
 };
 
 /// C# parser using tree-sitter.
@@ -19,20 +19,23 @@ pub struct CSharpParser {
 impl CSharpParser {
     pub fn new() -> Self {
         Self {
-            base: TreeSitterParser::new(
-                tree_sitter_c_sharp::LANGUAGE.into(),
-                "C#",
-                &["cs"],
-            ),
+            base: TreeSitterParser::new(tree_sitter_c_sharp::LANGUAGE.into(), "C#", &["cs"]),
         }
     }
 
-    fn extract_method(&self, node: &Node, content: &str, path: &str, class_name: Option<&str>) -> Option<FunctionEntity> {
+    fn extract_method(
+        &self,
+        node: &Node,
+        content: &str,
+        path: &str,
+        class_name: Option<&str>,
+    ) -> Option<FunctionEntity> {
         let name_node = node.child_by_field_name("name")?;
         let name = TreeSitterParser::node_text(&name_node, content).to_string();
 
         let params = self.extract_parameters(node, content);
-        let return_type = node.child_by_field_name("type")
+        let return_type = node
+            .child_by_field_name("type")
             .map(|n| TreeSitterParser::node_text(&n, content).to_string());
 
         let qualified_name = if let Some(class) = class_name {
@@ -112,7 +115,8 @@ impl CSharpParser {
             for child in body.children(&mut cursor) {
                 if child.kind() == "method_declaration" {
                     if let Some(method_name) = child.child_by_field_name("name") {
-                        required_methods.push(TreeSitterParser::node_text(&method_name, content).to_string());
+                        required_methods
+                            .push(TreeSitterParser::node_text(&method_name, content).to_string());
                     }
                 }
             }
@@ -147,7 +151,8 @@ impl CSharpParser {
             for child in body.children(&mut cursor) {
                 if child.kind() == "enum_member_declaration" {
                     if let Some(member_name) = child.child_by_field_name("name") {
-                        let discriminant = child.child_by_field_name("value")
+                        let discriminant = child
+                            .child_by_field_name("value")
                             .map(|v| TreeSitterParser::node_text(&v, content).to_string());
 
                         variants.push(EnumVariant {
@@ -183,11 +188,13 @@ impl CSharpParser {
             let mut cursor = params_node.walk();
             for child in params_node.children(&mut cursor) {
                 if child.kind() == "parameter" {
-                    let name = child.child_by_field_name("name")
+                    let name = child
+                        .child_by_field_name("name")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_default();
 
-                    let type_name = child.child_by_field_name("type")
+                    let type_name = child
+                        .child_by_field_name("type")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_else(|| "object".to_string());
 
@@ -219,7 +226,8 @@ impl CSharpParser {
                     let modifiers = self.extract_modifiers(&child, content);
                     let visibility = self.modifiers_to_visibility(&modifiers);
 
-                    let type_name = child.child_by_field_name("type")
+                    let type_name = child
+                        .child_by_field_name("type")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_default();
 
@@ -232,7 +240,8 @@ impl CSharpParser {
                                 if var.kind() == "variable_declarator" {
                                     if let Some(name_node) = var.child_by_field_name("name") {
                                         fields.push(FieldInfo {
-                                            name: TreeSitterParser::node_text(&name_node, content).to_string(),
+                                            name: TreeSitterParser::node_text(&name_node, content)
+                                                .to_string(),
                                             type_name: type_name.clone(),
                                             visibility: visibility.clone(),
                                             attributes: modifiers.clone(),
@@ -250,11 +259,13 @@ impl CSharpParser {
                     let modifiers = self.extract_modifiers(&child, content);
                     let visibility = self.modifiers_to_visibility(&modifiers);
 
-                    let name = child.child_by_field_name("name")
+                    let name = child
+                        .child_by_field_name("name")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_default();
 
-                    let type_name = child.child_by_field_name("type")
+                    let type_name = child
+                        .child_by_field_name("type")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_default();
 
@@ -293,7 +304,8 @@ impl CSharpParser {
 
         for child in node.children(&mut cursor) {
             let kind = child.kind();
-            if kind == "ref" || kind == "out" || kind == "in" || kind == "params" || kind == "this" {
+            if kind == "ref" || kind == "out" || kind == "in" || kind == "params" || kind == "this"
+            {
                 modifiers.push(TreeSitterParser::node_text(&child, content).to_string());
             }
         }
@@ -305,7 +317,8 @@ impl CSharpParser {
         node.child_by_field_name("type_parameters")
             .map(|params| {
                 let mut cursor = params.walk();
-                params.children(&mut cursor)
+                params
+                    .children(&mut cursor)
                     .filter(|c| c.kind() == "type_parameter")
                     .map(|c| TreeSitterParser::node_text(&c, content).to_string())
                     .collect()
@@ -373,9 +386,7 @@ impl CSharpParser {
             if s.kind() == "comment" {
                 let text = TreeSitterParser::node_text(&s, content);
                 if text.starts_with("///") {
-                    let cleaned = text
-                        .trim_start_matches("///")
-                        .trim();
+                    let cleaned = text.trim_start_matches("///").trim();
                     comments.push(cleaned.to_string());
                 } else {
                     break;
@@ -410,7 +421,13 @@ impl CSharpParser {
         self.extract_calls_recursive(node, content, caller_id, result);
     }
 
-    fn extract_calls_recursive(&self, node: &Node, content: &str, caller_id: &str, result: &mut ParseResult) {
+    fn extract_calls_recursive(
+        &self,
+        node: &Node,
+        content: &str,
+        caller_id: &str,
+        result: &mut ParseResult,
+    ) {
         match node.kind() {
             "invocation_expression" => {
                 // Get the invoked member
@@ -418,7 +435,8 @@ impl CSharpParser {
                     let callee_name = match func_node.kind() {
                         "member_access_expression" => {
                             // obj.Method()
-                            func_node.child_by_field_name("name")
+                            func_node
+                                .child_by_field_name("name")
                                 .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         }
                         "identifier" | "generic_name" => {
@@ -455,7 +473,14 @@ impl CSharpParser {
         }
     }
 
-    fn process_node(&self, node: Node, content: &str, path: &str, result: &mut ParseResult, class_context: Option<&str>) {
+    fn process_node(
+        &self,
+        node: Node,
+        content: &str,
+        path: &str,
+        result: &mut ParseResult,
+        class_context: Option<&str>,
+    ) {
         match node.kind() {
             "method_declaration" => {
                 if let Some(func) = self.extract_method(&node, content, path, class_context) {

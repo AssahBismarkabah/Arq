@@ -7,18 +7,18 @@
 //! - **Structure**: Files, Modules, Packages
 //! - **Test**: Test cases, Test suites
 
-mod code;
 mod api;
+mod code;
 mod structure;
 mod test;
 
-pub use code::*;
 pub use api::*;
+pub use code::*;
 pub use structure::*;
 pub use test::*;
 
-use serde::{Deserialize, Serialize};
 use super::NodeCategory;
+use serde::{Deserialize, Serialize};
 
 /// A unified node type that can hold any entity in the knowledge graph.
 ///
@@ -68,8 +68,12 @@ impl GraphNode {
     /// Get the category of this node.
     pub fn category(&self) -> NodeCategory {
         match self {
-            Self::Function(_) | Self::Struct(_) | Self::Trait(_) |
-            Self::Impl(_) | Self::Enum(_) | Self::Constant(_) => NodeCategory::Code,
+            Self::Function(_)
+            | Self::Struct(_)
+            | Self::Trait(_)
+            | Self::Impl(_)
+            | Self::Enum(_)
+            | Self::Constant(_) => NodeCategory::Code,
 
             Self::Endpoint(_) | Self::Schema(_) | Self::Operation(_) => NodeCategory::Api,
 

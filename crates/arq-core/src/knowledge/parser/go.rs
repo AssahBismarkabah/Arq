@@ -4,10 +4,10 @@ use tree_sitter::Node;
 
 use super::result::ParseResult;
 use super::traits::{Parser, ParserCapability};
-use super::treesitter::{TreeSitterParser, extract_doc_comment};
-use crate::knowledge::ontology::edges::{CallsEdge, CallType, ContainsEdge};
+use super::treesitter::{extract_doc_comment, TreeSitterParser};
+use crate::knowledge::ontology::edges::{CallType, CallsEdge, ContainsEdge};
 use crate::knowledge::ontology::nodes::{
-    FunctionEntity, StructEntity, TraitEntity, Visibility, FieldInfo, Parameter,
+    FieldInfo, FunctionEntity, Parameter, StructEntity, TraitEntity, Visibility,
 };
 
 /// Go parser using tree-sitter.
@@ -18,11 +18,7 @@ pub struct GoParser {
 impl GoParser {
     pub fn new() -> Self {
         Self {
-            base: TreeSitterParser::new(
-                tree_sitter_go::LANGUAGE.into(),
-                "Go",
-                &["go"],
-            ),
+            base: TreeSitterParser::new(tree_sitter_go::LANGUAGE.into(), "Go", &["go"]),
         }
     }
 
@@ -31,19 +27,20 @@ impl GoParser {
         let name = TreeSitterParser::node_text(&name_node, content).to_string();
 
         let params = self.extract_parameters(node, content);
-        let return_type = node.child_by_field_name("result")
+        let return_type = node
+            .child_by_field_name("result")
             .map(|n| TreeSitterParser::node_text(&n, content).to_string());
 
         // Check for receiver (method)
-        let receiver = node.child_by_field_name("receiver")
-            .and_then(|r| {
-                // Extract type from receiver
-                let mut cursor = r.walk();
-                let result = r.children(&mut cursor)
-                    .find(|c| c.kind() == "type_identifier" || c.kind() == "pointer_type")
-                    .map(|t| TreeSitterParser::node_text(&t, content).to_string());
-                result
-            });
+        let receiver = node.child_by_field_name("receiver").and_then(|r| {
+            // Extract type from receiver
+            let mut cursor = r.walk();
+            let result = r
+                .children(&mut cursor)
+                .find(|c| c.kind() == "type_identifier" || c.kind() == "pointer_type")
+                .map(|t| TreeSitterParser::node_text(&t, content).to_string());
+            result
+        });
 
         let qualified_name = if let Some(ref recv) = receiver {
             format!("{}.{}", recv.trim_start_matches('*'), name)
@@ -113,7 +110,8 @@ impl GoParser {
         for child in type_node.children(&mut cursor) {
             if child.kind() == "method_spec" {
                 if let Some(method_name) = child.child_by_field_name("name") {
-                    required_methods.push(TreeSitterParser::node_text(&method_name, content).to_string());
+                    required_methods
+                        .push(TreeSitterParser::node_text(&method_name, content).to_string());
                 }
             }
         }
@@ -142,12 +140,14 @@ impl GoParser {
             let mut cursor = params_node.walk();
             for child in params_node.children(&mut cursor) {
                 if child.kind() == "parameter_declaration" {
-                    let names: Vec<String> = child.children(&mut child.walk())
+                    let names: Vec<String> = child
+                        .children(&mut child.walk())
                         .filter(|c| c.kind() == "identifier")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .collect();
 
-                    let type_name = child.child_by_field_name("type")
+                    let type_name = child
+                        .child_by_field_name("type")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_else(|| "interface{}".to_string());
 
@@ -175,17 +175,24 @@ impl GoParser {
                 let mut list_cursor = child.walk();
                 for field in child.children(&mut list_cursor) {
                     if field.kind() == "field_declaration" {
-                        let names: Vec<String> = field.children(&mut field.walk())
+                        let names: Vec<String> = field
+                            .children(&mut field.walk())
                             .filter(|c| c.kind() == "field_identifier")
                             .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                             .collect();
 
-                        let type_name = field.child_by_field_name("type")
+                        let type_name = field
+                            .child_by_field_name("type")
                             .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                             .unwrap_or_default();
 
                         for name in names {
-                            let visibility = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                            let visibility = if name
+                                .chars()
+                                .next()
+                                .map(|c| c.is_uppercase())
+                                .unwrap_or(false)
+                            {
                                 Visibility::Public
                             } else {
                                 Visibility::Private
@@ -219,7 +226,12 @@ impl GoParser {
 
     fn extract_visibility(&self, name_node: &Node, content: &str) -> Visibility {
         let name = TreeSitterParser::node_text(name_node, content);
-        if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if name
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             Visibility::Public
         } else {
             Visibility::Private
@@ -231,7 +243,13 @@ impl GoParser {
         self.extract_calls_recursive(node, content, caller_id, result);
     }
 
-    fn extract_calls_recursive(&self, node: &Node, content: &str, caller_id: &str, result: &mut ParseResult) {
+    fn extract_calls_recursive(
+        &self,
+        node: &Node,
+        content: &str,
+        caller_id: &str,
+        result: &mut ParseResult,
+    ) {
         if node.kind() == "call_expression" {
             // Get the function being called
             if let Some(func_node) = node.child_by_field_name("function") {
@@ -239,7 +257,10 @@ impl GoParser {
                     "selector_expression" => {
                         // Method call: obj.Method()
                         if let Some(field) = func_node.child_by_field_name("field") {
-                            (TreeSitterParser::node_text(&field, content).to_string(), CallType::Method)
+                            (
+                                TreeSitterParser::node_text(&field, content).to_string(),
+                                CallType::Method,
+                            )
                         } else {
                             return;
                         }
@@ -247,7 +268,12 @@ impl GoParser {
                     "identifier" => {
                         // Direct call: Func()
                         let name = TreeSitterParser::node_text(&func_node, content).to_string();
-                        let call_type = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                        let call_type = if name
+                            .chars()
+                            .next()
+                            .map(|c| c.is_uppercase())
+                            .unwrap_or(false)
+                        {
                             CallType::Constructor
                         } else {
                             CallType::Direct

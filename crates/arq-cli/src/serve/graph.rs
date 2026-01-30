@@ -17,12 +17,12 @@ use super::models::{EdgeAttributes, GraphData, GraphEdge, GraphNode, NodeAttribu
 /// Colors are designed to be visually distinct.
 fn get_category_color(category: &str) -> &'static str {
     match category {
-        "function" | "method" => "#0969da",    // Blue
-        "struct" | "class" => "#1a7f37",       // Green
-        "trait" | "interface" => "#9a6700",    // Yellow/Orange
-        "enum" => "#cf222e",                   // Red
+        "function" | "method" => "#0969da",     // Blue
+        "struct" | "class" => "#1a7f37",        // Green
+        "trait" | "interface" => "#9a6700",     // Yellow/Orange
+        "enum" => "#cf222e",                    // Red
         "impl" | "implementation" => "#8250df", // Purple
-        _ => "#57606a",                        // Gray (default)
+        _ => "#57606a",                         // Gray (default)
     }
 }
 
@@ -91,7 +91,14 @@ impl GraphBuilder {
         if let Ok(functions) = kg.list_all_functions().await {
             for func in functions {
                 let key = Self::make_key("fn", &func.file_path, func.start_line, &func.name);
-                self.add_node(key, func.name, "function", Some(func.file_path), Some(func.start_line), Some(func.end_line));
+                self.add_node(
+                    key,
+                    func.name,
+                    "function",
+                    Some(func.file_path),
+                    Some(func.start_line),
+                    Some(func.end_line),
+                );
             }
         }
     }
@@ -101,7 +108,14 @@ impl GraphBuilder {
         if let Ok(structs) = kg.list_structs().await {
             for s in structs {
                 let key = Self::make_key("struct", &s.file_path, s.start_line, &s.name);
-                self.add_node(key, s.name, "struct", Some(s.file_path), Some(s.start_line), Some(s.end_line));
+                self.add_node(
+                    key,
+                    s.name,
+                    "struct",
+                    Some(s.file_path),
+                    Some(s.start_line),
+                    Some(s.end_line),
+                );
             }
         }
     }
@@ -111,7 +125,14 @@ impl GraphBuilder {
         if let Ok(traits) = kg.list_traits().await {
             for t in traits {
                 let key = Self::make_key("trait", &t.file_path, t.start_line, &t.name);
-                self.add_node(key, t.name, "trait", Some(t.file_path), Some(t.start_line), Some(t.end_line));
+                self.add_node(
+                    key,
+                    t.name,
+                    "trait",
+                    Some(t.file_path),
+                    Some(t.start_line),
+                    Some(t.end_line),
+                );
             }
         }
     }
@@ -121,7 +142,14 @@ impl GraphBuilder {
         if let Ok(enums) = kg.list_enums().await {
             for e in enums {
                 let key = Self::make_key("enum", &e.file_path, e.start_line, &e.name);
-                self.add_node(key, e.name, "enum", Some(e.file_path), Some(e.start_line), Some(e.end_line));
+                self.add_node(
+                    key,
+                    e.name,
+                    "enum",
+                    Some(e.file_path),
+                    Some(e.start_line),
+                    Some(e.end_line),
+                );
             }
         }
     }
@@ -142,7 +170,14 @@ impl GraphBuilder {
                 };
 
                 let key = Self::make_key("impl", &i.file_path, i.start_line, &label);
-                self.add_node(key, label, "impl", Some(i.file_path), Some(i.start_line), Some(i.end_line));
+                self.add_node(
+                    key,
+                    label,
+                    "impl",
+                    Some(i.file_path),
+                    Some(i.start_line),
+                    Some(i.end_line),
+                );
             }
         }
     }
@@ -153,8 +188,12 @@ impl GraphBuilder {
         if let Ok(functions) = kg.list_all_functions().await {
             for func in functions {
                 let key = Self::make_key("fn", &func.file_path, func.start_line, &func.name);
-                self.id_to_key.insert(func.qualified_name.clone(), key.clone());
-                self.id_to_key.insert(format!("function:{}:{}", func.file_path, func.name), key.clone());
+                self.id_to_key
+                    .insert(func.qualified_name.clone(), key.clone());
+                self.id_to_key.insert(
+                    format!("function:{}:{}", func.file_path, func.name),
+                    key.clone(),
+                );
                 self.id_to_key.insert(func.name.clone(), key.clone());
             }
         }
@@ -192,11 +231,15 @@ impl GraphBuilder {
         if let Ok(calls) = kg.list_calls().await {
             for call in calls {
                 // Resolve source and target node keys
-                let source = self.id_to_key.get(&call.caller_id)
+                let source = self
+                    .id_to_key
+                    .get(&call.caller_id)
                     .or_else(|| self.id_to_key.get(&call.caller_name))
                     .cloned();
 
-                let target = self.id_to_key.get(&call.callee_id)
+                let target = self
+                    .id_to_key
+                    .get(&call.callee_id)
                     .or_else(|| self.id_to_key.get(&call.callee_name))
                     .cloned();
 
@@ -218,7 +261,11 @@ impl GraphBuilder {
                     let impl_key = Self::make_key("impl", &i.file_path, i.start_line, &label);
 
                     // Find the trait node by name
-                    if let Some(trait_key) = self.id_to_key.get(&Self::extract_simple_name(trait_name)).cloned() {
+                    if let Some(trait_key) = self
+                        .id_to_key
+                        .get(&Self::extract_simple_name(trait_name))
+                        .cloned()
+                    {
                         self.add_edge(impl_key, trait_key, "implements");
                     }
                 }
@@ -232,7 +279,8 @@ impl GraphBuilder {
             for func in functions {
                 // If function has a parent (is a method), create edge from parent to method
                 if let Some(ref parent) = func.parent {
-                    let func_key = Self::make_key("fn", &func.file_path, func.start_line, &func.name);
+                    let func_key =
+                        Self::make_key("fn", &func.file_path, func.start_line, &func.name);
 
                     // Try to find the parent struct/impl
                     let parent_name = Self::extract_simple_name(parent);
@@ -257,7 +305,8 @@ impl GraphBuilder {
     /// Removes generics, doc comments, and other noise.
     fn extract_simple_name(s: &str) -> String {
         // Take only the part before '<' (generics) or '{' (body) or '(' (params)
-        let name = s.split(&['<', '{', '(', '#'][..])
+        let name = s
+            .split(&['<', '{', '(', '#'][..])
             .next()
             .unwrap_or(s)
             .trim();

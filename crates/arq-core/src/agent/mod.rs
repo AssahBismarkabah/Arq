@@ -1,8 +1,3 @@
 mod executor;
 
-pub use executor::{
-    AgentExecutor,
-    ExecutionResult,
-    ExecutionItem,
-    ConformanceStatus,
-};
+pub use executor::{AgentExecutor, ConformanceStatus, ExecutionItem, ExecutionResult};

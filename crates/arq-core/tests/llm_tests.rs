@@ -1,6 +1,6 @@
-use arq_core::{ClaudeClient, OpenAIClient, LLMError, LLMConfig};
-use arq_core::llm::Provider;
 use arq_core::config::DEFAULT_OLLAMA_MODEL;
+use arq_core::llm::Provider;
+use arq_core::{ClaudeClient, LLMConfig, LLMError, OpenAIClient};
 
 // Claude client tests
 mod claude {
@@ -18,8 +18,8 @@ mod claude {
 
     #[test]
     fn test_client_with_api_url() {
-        let _client = ClaudeClient::new("test-key")
-            .with_api_url("https://proxy.example.com/v1/messages");
+        let _client =
+            ClaudeClient::new("test-key").with_api_url("https://proxy.example.com/v1/messages");
     }
 
     #[test]
@@ -36,11 +36,7 @@ mod openai {
 
     #[test]
     fn test_client_creation() {
-        let _client = OpenAIClient::new(
-            "https://api.example.com/v1",
-            "test-key",
-            "gpt-4",
-        );
+        let _client = OpenAIClient::new("https://api.example.com/v1", "test-key", "gpt-4");
     }
 
     #[test]
@@ -60,11 +56,7 @@ mod openai {
 
     #[test]
     fn test_url_trailing_slash_removed() {
-        let _client = OpenAIClient::new(
-            "https://api.example.com/v1/",
-            "key",
-            "model",
-        );
+        let _client = OpenAIClient::new("https://api.example.com/v1/", "key", "model");
     }
 }
 

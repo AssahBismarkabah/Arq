@@ -1,14 +1,14 @@
 //! Application state and main event loop.
 
-use std::io::Stdout;
 use chrono::{DateTime, Utc};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::prelude::*;
+use std::io::Stdout;
 use tokio::sync::mpsc;
 
 use arq_core::{
-    Config, ContextBuilder, FileStorage, ResearchDoc, ResearchProgress, ResearchRunner,
-    Task, TaskManager, KnowledgeGraph, KnowledgeStore,
+    Config, ContextBuilder, FileStorage, KnowledgeGraph, KnowledgeStore, ResearchDoc,
+    ResearchProgress, ResearchRunner, Task, TaskManager,
 };
 
 use super::event::{Event, EventHandler, ResearchResult};
@@ -231,7 +231,9 @@ impl App {
         // Find the index of the current model in available_models
         let selected_model_index = if !config.llm.available_models.is_empty() {
             let current_model = config.llm.model_or_default();
-            config.llm.available_models
+            config
+                .llm
+                .available_models
                 .iter()
                 .position(|m| m == &current_model)
                 .unwrap_or(0)
@@ -321,7 +323,10 @@ impl App {
                     Event::Tick => {
                         // Update cycling status messages during research
                         self.tick_count = self.tick_count.wrapping_add(1);
-                        if matches!(self.research_state, ResearchState::Researching | ResearchState::Refining) {
+                        if matches!(
+                            self.research_state,
+                            ResearchState::Researching | ResearchState::Refining
+                        ) {
                             // Cycle message every ~8 ticks (about 2 seconds at 250ms tick rate)
                             let msg_index = (self.tick_count / 8) % THINKING_MESSAGES.len();
                             self.status_message = Some(THINKING_MESSAGES[msg_index].to_string());
@@ -332,9 +337,10 @@ impl App {
                     }
                     Event::StreamComplete => {
                         if !self.stream_buffer.is_empty() {
-                            self.chat_messages.push(ChatMessage::assistant(
-                                std::mem::take(&mut self.stream_buffer),
-                            ));
+                            self.chat_messages
+                                .push(ChatMessage::assistant(std::mem::take(
+                                    &mut self.stream_buffer,
+                                )));
                         }
                         self.is_streaming = false;
                     }
@@ -390,7 +396,8 @@ impl App {
                 self.set_progress_status(4, ProgressStatus::Complete);
             }
             ResearchProgress::Error(msg) => {
-                self.chat_messages.push(ChatMessage::system(format!("Error: {}", msg)));
+                self.chat_messages
+                    .push(ChatMessage::system(format!("Error: {}", msg)));
                 // Mark current item as failed
                 for item in &mut self.progress_items {
                     if item.status == ProgressStatus::InProgress {
@@ -426,16 +433,18 @@ impl App {
         // Prompt user for validation
         self.chat_messages.push(ChatMessage::system(
             "Is this understanding correct?\n\
-             Press [a] to approve and save, or type corrections."
+             Press [a] to approve and save, or type corrections.",
         ));
-        self.status_message = Some("Awaiting approval... [a] approve, [i] type corrections".to_string());
+        self.status_message =
+            Some("Awaiting approval... [a] approve, [i] type corrections".to_string());
     }
 
     /// Handle research failure.
     fn handle_research_failed(&mut self, error: String) {
         self.is_streaming = false;
         self.research_state = ResearchState::Idle;
-        self.chat_messages.push(ChatMessage::system(format!("Research failed: {}", error)));
+        self.chat_messages
+            .push(ChatMessage::system(format!("Research failed: {}", error)));
 
         // Mark progress as failed
         for item in &mut self.progress_items {
@@ -453,14 +462,15 @@ impl App {
                 self.current_task = Some(task);
                 self.status_message = Some("Research saved to .arq/research-doc.md".to_string());
                 self.chat_messages.push(ChatMessage::system(
-                    "Research approved and saved. You can now proceed to Planner tab."
+                    "Research approved and saved. You can now proceed to Planner tab.",
                 ));
                 // Mark final progress item complete
                 self.set_progress_status(4, ProgressStatus::Complete);
             }
             Err(e) => {
                 self.chat_messages.push(ChatMessage::system(format!(
-                    "Failed to save research: {}", e
+                    "Failed to save research: {}",
+                    e
                 )));
                 // Restore state for retry
                 self.research_state = ResearchState::AwaitingValidation {
@@ -511,8 +521,10 @@ impl App {
             }
             KeyCode::Char('a') => {
                 // Approve research if awaiting validation
-                if let ResearchState::AwaitingValidation { task_id, pending_doc } =
-                    std::mem::replace(&mut self.research_state, ResearchState::Idle)
+                if let ResearchState::AwaitingValidation {
+                    task_id,
+                    pending_doc,
+                } = std::mem::replace(&mut self.research_state, ResearchState::Idle)
                 {
                     self.approve_research(task_id, pending_doc);
                 }
@@ -563,8 +575,10 @@ impl App {
                     }
                     ResearchState::AwaitingValidation { .. } => {
                         // User is providing correction - extract values and refine
-                        if let ResearchState::AwaitingValidation { task_id, pending_doc } =
-                            std::mem::replace(&mut self.research_state, ResearchState::Refining)
+                        if let ResearchState::AwaitingValidation {
+                            task_id,
+                            pending_doc,
+                        } = std::mem::replace(&mut self.research_state, ResearchState::Refining)
                         {
                             self.refine_research(task_id, pending_doc, input, event_tx);
                         }
@@ -575,14 +589,12 @@ impl App {
                 }
             }
             SelectedTab::Planner => {
-                self.chat_messages.push(ChatMessage::system(
-                    "Planning phase not yet implemented.",
-                ));
+                self.chat_messages
+                    .push(ChatMessage::system("Planning phase not yet implemented."));
             }
             SelectedTab::Agent => {
-                self.chat_messages.push(ChatMessage::system(
-                    "Agent phase not yet implemented.",
-                ));
+                self.chat_messages
+                    .push(ChatMessage::system("Agent phase not yet implemented."));
             }
         }
 
@@ -600,9 +612,8 @@ impl App {
         let task = match self.manager.create_task(&prompt) {
             Ok(task) => task,
             Err(e) => {
-                self.chat_messages.push(ChatMessage::system(format!(
-                    "Failed to create task: {}", e
-                )));
+                self.chat_messages
+                    .push(ChatMessage::system(format!("Failed to create task: {}", e)));
                 self.is_streaming = false;
                 return;
             }
@@ -619,17 +630,15 @@ impl App {
 
         // Add message to show research is starting
         self.chat_messages.push(ChatMessage::system(format!(
-            "Researching: {} ...", task.prompt
+            "Researching: {} ...",
+            task.prompt
         )));
 
         // Spawn the research task
         tokio::spawn(async move {
             match run_research_task(task, config, kg_db_path, event_tx.clone()).await {
                 Ok(doc) => {
-                    let _ = event_tx.send(Event::ResearchComplete(ResearchResult {
-                        task_id,
-                        doc,
-                    }));
+                    let _ = event_tx.send(Event::ResearchComplete(ResearchResult { task_id, doc }));
                 }
                 Err(error) => {
                     let _ = event_tx.send(Event::ResearchFailed(error));
@@ -660,9 +669,7 @@ impl App {
              User correction/feedback:\n{}\n\n\
              Please update the research based on this feedback. \
              Address the user's concerns and provide corrected findings.",
-            original_doc.summary,
-            original_doc.suggested_approach,
-            correction
+            original_doc.summary, original_doc.suggested_approach, correction
         );
 
         // Create a temporary task for the refinement (uses refinement prompt)
@@ -696,7 +703,8 @@ impl App {
             SelectedTab::Researcher => true, // Always accessible
             SelectedTab::Planner => {
                 // Requires saved research document
-                let has_research = self.current_task
+                let has_research = self
+                    .current_task
                     .as_ref()
                     .map(|t| t.research_doc.is_some())
                     .unwrap_or(false);
@@ -708,7 +716,8 @@ impl App {
             }
             SelectedTab::Agent => {
                 // Requires saved plan (not implemented yet, allow for now)
-                let has_plan = self.current_task
+                let has_plan = self
+                    .current_task
                     .as_ref()
                     .map(|t| t.plan.is_some())
                     .unwrap_or(false);
@@ -746,7 +755,8 @@ impl App {
         // Update config
         self.config.llm.model = Some(new_model.clone());
 
-        self.status_message = Some(format!("Model: {} ({}/{})",
+        self.status_message = Some(format!(
+            "Model: {} ({}/{})",
             new_model,
             self.selected_model_index + 1,
             models.len()
@@ -772,36 +782,38 @@ async fn run_research_task(
     use std::sync::Arc;
 
     // Create context builder with config
-    let cwd = env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {}", e))?;
+    let cwd = env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
     let context_builder = ContextBuilder::with_config(cwd.clone(), config.context.clone());
 
     // Try to initialize knowledge graph for semantic search
-    let knowledge_store: Option<Arc<dyn KnowledgeStore>> = match KnowledgeGraph::open(&kg_db_path).await {
-        Ok(kg) => {
-            // Check if initialized, if not initialize and index
-            let kg = Arc::new(kg);
-            if !kg.is_initialized().await.unwrap_or(false) {
-                if let Err(e) = kg.initialize().await {
-                    eprintln!("Failed to initialize knowledge graph: {}", e);
-                    None
-                } else {
-                    // Index the codebase on first run
-                    let _ = event_tx.send(Event::ResearchProgress(ResearchProgress::SearchingKnowledgeGraph));
-                    if let Err(e) = kg.index_directory(&cwd).await {
-                        eprintln!("Failed to index codebase: {}", e);
+    let knowledge_store: Option<Arc<dyn KnowledgeStore>> =
+        match KnowledgeGraph::open(&kg_db_path).await {
+            Ok(kg) => {
+                // Check if initialized, if not initialize and index
+                let kg = Arc::new(kg);
+                if !kg.is_initialized().await.unwrap_or(false) {
+                    if let Err(e) = kg.initialize().await {
+                        eprintln!("Failed to initialize knowledge graph: {}", e);
+                        None
+                    } else {
+                        // Index the codebase on first run
+                        let _ = event_tx.send(Event::ResearchProgress(
+                            ResearchProgress::SearchingKnowledgeGraph,
+                        ));
+                        if let Err(e) = kg.index_directory(&cwd).await {
+                            eprintln!("Failed to index codebase: {}", e);
+                        }
+                        Some(kg as Arc<dyn KnowledgeStore>)
                     }
+                } else {
                     Some(kg as Arc<dyn KnowledgeStore>)
                 }
-            } else {
-                Some(kg as Arc<dyn KnowledgeStore>)
             }
-        }
-        Err(e) => {
-            eprintln!("Failed to open knowledge graph: {}", e);
-            None
-        }
-    };
+            Err(e) => {
+                eprintln!("Failed to open knowledge graph: {}", e);
+                None
+            }
+        };
 
     // Create channels for progress and streaming
     let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<ResearchProgress>();
@@ -836,7 +848,11 @@ async fn run_research_task(
     macro_rules! create_runner {
         ($client:expr) => {
             if let Some(ref kg) = knowledge_store {
-                ResearchRunner::with_knowledge_store($client, context_builder.clone(), Arc::clone(kg))
+                ResearchRunner::with_knowledge_store(
+                    $client,
+                    context_builder.clone(),
+                    Arc::clone(kg),
+                )
             } else {
                 ResearchRunner::new($client, context_builder.clone())
             }
@@ -845,7 +861,9 @@ async fn run_research_task(
 
     let doc = match provider {
         "anthropic" | "claude" => {
-            let api_key = config.llm.api_key_or_env()
+            let api_key = config
+                .llm
+                .api_key_or_env()
                 .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
             let client = ClaudeClient::new(api_key).with_model(&model);
             let runner = create_runner!(client);

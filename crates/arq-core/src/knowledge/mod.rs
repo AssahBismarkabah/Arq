@@ -71,7 +71,11 @@ pub trait KnowledgeStore: Send + Sync {
     async fn remove_file(&self, path: &str) -> Result<(), KnowledgeError>;
 
     /// Semantic search for code relevant to a query.
-    async fn search_code(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>, KnowledgeError>;
+    async fn search_code(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, KnowledgeError>;
 
     /// Get all entities that the given entity depends on.
     async fn get_dependencies(&self, entity_id: &str) -> Result<Vec<String>, KnowledgeError>;
@@ -86,7 +90,10 @@ pub trait KnowledgeStore: Send + Sync {
     async fn list_functions(&self, limit: usize) -> Result<Vec<FunctionNode>, KnowledgeError>;
 
     /// Find a function by name.
-    async fn find_function_by_name(&self, name: &str) -> Result<Option<FunctionNode>, KnowledgeError>;
+    async fn find_function_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<FunctionNode>, KnowledgeError>;
 
     /// Count call relations (for debugging).
     async fn count_calls(&self) -> Result<usize, KnowledgeError>;
@@ -121,7 +128,9 @@ impl KnowledgeGraph {
     }
 
     /// List all function entities (rich ontology).
-    pub async fn list_all_functions(&self) -> Result<Vec<ontology::nodes::FunctionEntity>, KnowledgeError> {
+    pub async fn list_all_functions(
+        &self,
+    ) -> Result<Vec<ontology::nodes::FunctionEntity>, KnowledgeError> {
         self.db.list_function_entities().await
     }
 
@@ -174,10 +183,8 @@ impl KnowledgeStore for KnowledgeGraph {
     async fn index_directory(&self, path: &Path) -> Result<IndexStats, KnowledgeError> {
         use indexer::Indexer;
 
-        let indexer = indexer::GenericIndexer::new(
-            Arc::clone(&self.db),
-            Arc::clone(&self.embedder),
-        );
+        let indexer =
+            indexer::GenericIndexer::new(Arc::clone(&self.db), Arc::clone(&self.embedder));
 
         indexer.index_directory(path).await
     }
@@ -185,10 +192,8 @@ impl KnowledgeStore for KnowledgeGraph {
     async fn index_file(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
         use indexer::Indexer;
 
-        let indexer = indexer::GenericIndexer::new(
-            Arc::clone(&self.db),
-            Arc::clone(&self.embedder),
-        );
+        let indexer =
+            indexer::GenericIndexer::new(Arc::clone(&self.db), Arc::clone(&self.embedder));
 
         indexer.index_file(path, content).await
     }
@@ -197,12 +202,18 @@ impl KnowledgeStore for KnowledgeGraph {
         self.db.remove_file(path).await
     }
 
-    async fn search_code(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>, KnowledgeError> {
+    async fn search_code(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, KnowledgeError> {
         // Generate embedding for query
         let query_embedding = self.embedder.embed(&[query.to_string()])?;
 
         // Search using vector similarity
-        self.db.search_by_embedding(&query_embedding[0], limit).await
+        self.db
+            .search_by_embedding(&query_embedding[0], limit)
+            .await
     }
 
     async fn get_dependencies(&self, entity_id: &str) -> Result<Vec<String>, KnowledgeError> {
@@ -221,7 +232,10 @@ impl KnowledgeStore for KnowledgeGraph {
         self.db.list_functions(limit).await
     }
 
-    async fn find_function_by_name(&self, name: &str) -> Result<Option<FunctionNode>, KnowledgeError> {
+    async fn find_function_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<FunctionNode>, KnowledgeError> {
         self.db.find_function_by_name(name).await
     }
 

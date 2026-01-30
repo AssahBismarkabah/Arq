@@ -1,10 +1,10 @@
-mod error;
 mod claude;
+mod error;
 mod openai;
 mod provider;
 
-pub use error::LLMError;
 pub use claude::ClaudeClient;
+pub use error::LLMError;
 pub use openai::OpenAIClient;
 pub use provider::Provider;
 
@@ -71,11 +71,7 @@ pub trait LLM: Send + Sync {
     async fn complete(&self, prompt: &str) -> Result<String, LLMError>;
 
     /// Complete a prompt with a system message.
-    async fn complete_with_system(
-        &self,
-        system: &str,
-        prompt: &str,
-    ) -> Result<String, LLMError>;
+    async fn complete_with_system(&self, system: &str, prompt: &str) -> Result<String, LLMError>;
 
     /// Stream a completion with a system message.
     ///
@@ -110,11 +106,7 @@ impl LLM for Box<dyn LLM> {
         (**self).complete(prompt).await
     }
 
-    async fn complete_with_system(
-        &self,
-        system: &str,
-        prompt: &str,
-    ) -> Result<String, LLMError> {
+    async fn complete_with_system(&self, system: &str, prompt: &str) -> Result<String, LLMError> {
         (**self).complete_with_system(system, prompt).await
     }
 

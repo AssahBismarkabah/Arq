@@ -12,10 +12,9 @@
 
 use proc_macro2::Span;
 use syn::{
-    spanned::Spanned,
-    visit::Visit, Attribute, FnArg, GenericParam, Generics, ImplItem, Item,
-    ItemConst, ItemEnum, ItemFn, ItemImpl, ItemStatic, ItemStruct, ItemTrait,
-    Pat, ReturnType, Signature, StaticMutability, TraitItem, Type, Visibility as SynVisibility,
+    spanned::Spanned, visit::Visit, Attribute, FnArg, GenericParam, Generics, ImplItem, Item,
+    ItemConst, ItemEnum, ItemFn, ItemImpl, ItemStatic, ItemStruct, ItemTrait, Pat, ReturnType,
+    Signature, StaticMutability, TraitItem, Type, Visibility as SynVisibility,
 };
 
 use super::result::ParseResult;
@@ -24,8 +23,8 @@ use crate::knowledge::ontology::edges::{
     CallsEdge, ContainsEdge, ExtendsEdge, ImplementsEdge, ReturnsTypeEdge,
 };
 use crate::knowledge::ontology::nodes::{
-    ComplexityMetrics, ConstantEntity, EnumEntity, EnumVariant, FieldInfo,
-    FunctionEntity, ImplEntity, Parameter, StructEntity, TraitEntity, Visibility,
+    ComplexityMetrics, ConstantEntity, EnumEntity, EnumVariant, FieldInfo, FunctionEntity,
+    ImplEntity, Parameter, StructEntity, TraitEntity, Visibility,
 };
 
 /// Rust parser using syn for AST-based extraction.
@@ -37,12 +36,16 @@ pub struct RustParser {
 impl RustParser {
     /// Create a new Rust parser with default settings.
     pub fn new() -> Self {
-        Self { extract_calls: true }
+        Self {
+            extract_calls: true,
+        }
     }
 
     /// Create a parser without call extraction (faster).
     pub fn without_calls() -> Self {
-        Self { extract_calls: false }
+        Self {
+            extract_calls: false,
+        }
     }
 }
 
@@ -153,7 +156,12 @@ impl<'a> RustVisitor<'a> {
                         if let Some(ident) = path.get_ident() {
                             derives.push(ident.to_string());
                         } else {
-                            derives.push(path.segments.last().map(|s| s.ident.to_string()).unwrap_or_default());
+                            derives.push(
+                                path.segments
+                                    .last()
+                                    .map(|s| s.ident.to_string())
+                                    .unwrap_or_default(),
+                            );
                         }
                     }
                 }
@@ -169,7 +177,10 @@ impl<'a> RustVisitor<'a> {
             .iter()
             .filter(|attr| !attr.path().is_ident("doc") && !attr.path().is_ident("derive"))
             .map(|attr| {
-                let path = attr.path().segments.iter()
+                let path = attr
+                    .path()
+                    .segments
+                    .iter()
                     .map(|s| s.ident.to_string())
                     .collect::<Vec<_>>()
                     .join("::");
@@ -183,7 +194,10 @@ impl<'a> RustVisitor<'a> {
         match vis {
             SynVisibility::Public(_) => Visibility::Public,
             SynVisibility::Restricted(r) => {
-                let path = r.path.segments.iter()
+                let path = r
+                    .path
+                    .segments
+                    .iter()
                     .map(|s| s.ident.to_string())
                     .collect::<Vec<_>>()
                     .join("::");
@@ -287,7 +301,9 @@ impl<'a> RustVisitor<'a> {
         let loc = (end - start) as u32;
 
         // Simple cyclomatic complexity estimation
-        let branching_keywords = ["if", "else", "match", "for", "while", "loop", "?", "&&", "||"];
+        let branching_keywords = [
+            "if", "else", "match", "for", "while", "loop", "?", "&&", "||",
+        ];
         let mut cyclomatic = 1u32;
         for keyword in branching_keywords {
             cyclomatic += code.matches(keyword).count() as u32;
@@ -396,7 +412,8 @@ impl<'a> RustVisitor<'a> {
         // Add return type edge if present
         if let Some(ref ret_type) = Self::extract_return_type(&item.sig.output) {
             let type_id = format!("type:?:{}", ret_type);
-            self.result.add_returns_type(ReturnsTypeEdge::new(&id, &type_id));
+            self.result
+                .add_returns_type(ReturnsTypeEdge::new(&id, &type_id));
         }
 
         // Extract calls from function body
@@ -471,9 +488,10 @@ impl<'a> RustVisitor<'a> {
     /// Process an impl item.
     fn process_impl(&mut self, item: &ItemImpl) {
         let target_type = quote::quote!(#item.self_ty).to_string();
-        let trait_name = item.trait_.as_ref().map(|(_, path, _)| {
-            quote::quote!(#path).to_string()
-        });
+        let trait_name = item
+            .trait_
+            .as_ref()
+            .map(|(_, path, _)| quote::quote!(#path).to_string());
 
         let id = if let Some(ref t) = trait_name {
             self.entity_id("impl", &format!("{}_for_{}", t, target_type))
@@ -498,9 +516,11 @@ impl<'a> RustVisitor<'a> {
             .collect();
 
         // Extract where clause
-        let where_clause = item.generics.where_clause.as_ref().map(|w| {
-            quote::quote!(#w).to_string()
-        });
+        let where_clause = item
+            .generics
+            .where_clause
+            .as_ref()
+            .map(|w| quote::quote!(#w).to_string());
 
         let entity = ImplEntity {
             id: Some(id.clone()),
@@ -559,9 +579,10 @@ impl<'a> RustVisitor<'a> {
                     })
                     .collect();
 
-                let discriminant = v.discriminant.as_ref().map(|(_, expr)| {
-                    quote::quote!(#expr).to_string()
-                });
+                let discriminant = v
+                    .discriminant
+                    .as_ref()
+                    .map(|(_, expr)| quote::quote!(#expr).to_string());
 
                 EnumVariant {
                     name: v.ident.to_string(),
@@ -752,7 +773,11 @@ impl CallExtractor {
     }
 
     /// Add a call edge.
-    fn add_call(&mut self, callee_name: &str, call_type: crate::knowledge::ontology::edges::CallType) {
+    fn add_call(
+        &mut self,
+        callee_name: &str,
+        call_type: crate::knowledge::ontology::edges::CallType,
+    ) {
         let mut edge = CallsEdge::new(&self.caller_id, self.callee_id(callee_name));
         edge.call_type = call_type;
         edge.is_conditional = self.in_conditional;
@@ -770,7 +795,12 @@ impl<'ast> syn::visit::Visit<'ast> for CallExtractor {
                 // Skip macros and common constructors
                 if !name.ends_with('!') {
                     use crate::knowledge::ontology::edges::CallType;
-                    let call_type = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    let call_type = if name
+                        .chars()
+                        .next()
+                        .map(|c| c.is_uppercase())
+                        .unwrap_or(false)
+                    {
                         CallType::Constructor
                     } else {
                         CallType::Direct
@@ -829,8 +859,8 @@ impl<'ast> syn::visit::Visit<'ast> for CallExtractor {
 
 #[cfg(test)]
 mod tests {
+    use super::super::result::{ParsedEdge, ParsedNode};
     use super::*;
-    use super::super::result::{ParsedNode, ParsedEdge};
 
     #[test]
     fn test_parse_struct() {
@@ -892,7 +922,10 @@ pub trait Handler: Send + Sync {
 }
 "#;
         let result = parser.parse_file("test.rs", code).unwrap();
-        assert!(result.nodes.iter().any(|n| matches!(n, ParsedNode::Trait(_))));
+        assert!(result
+            .nodes
+            .iter()
+            .any(|n| matches!(n, ParsedNode::Trait(_))));
 
         if let ParsedNode::Trait(t) = &result.nodes[0] {
             assert_eq!(t.name, "Handler");
@@ -918,10 +951,16 @@ impl Handler for MyStruct {
 
         // Should have impl + function
         assert!(result.nodes.len() >= 1);
-        assert!(result.nodes.iter().any(|n| matches!(n, ParsedNode::Impl(_))));
+        assert!(result
+            .nodes
+            .iter()
+            .any(|n| matches!(n, ParsedNode::Impl(_))));
 
         // Should have implements edge
-        assert!(result.edges.iter().any(|e| matches!(e, ParsedEdge::Implements(_))));
+        assert!(result
+            .edges
+            .iter()
+            .any(|e| matches!(e, ParsedEdge::Implements(_))));
     }
 
     #[test]
@@ -963,20 +1002,29 @@ fn helper_function() {}
         let result = parser.parse_file("test.rs", code).unwrap();
 
         // Should have 2 functions
-        let functions: Vec<_> = result.nodes.iter()
+        let functions: Vec<_> = result
+            .nodes
+            .iter()
             .filter(|n| matches!(n, ParsedNode::Function(_)))
             .collect();
         assert_eq!(functions.len(), 2, "Expected 2 functions");
 
         // Should have call edges
-        let calls: Vec<_> = result.edges.iter()
+        let calls: Vec<_> = result
+            .edges
+            .iter()
             .filter(|e| matches!(e, ParsedEdge::Calls(_)))
             .collect();
 
-        assert!(!calls.is_empty(), "Expected call edges to be extracted, got {} calls", calls.len());
+        assert!(
+            !calls.is_empty(),
+            "Expected call edges to be extracted, got {} calls",
+            calls.len()
+        );
 
         // Check we have the expected calls
-        let call_names: Vec<_> = calls.iter()
+        let call_names: Vec<_> = calls
+            .iter()
             .filter_map(|e| {
                 if let ParsedEdge::Calls(c) = e {
                     Some(c.to.clone())
@@ -986,11 +1034,20 @@ fn helper_function() {}
             })
             .collect();
 
-        assert!(call_names.iter().any(|n| n.contains("helper_function")),
-            "Expected helper_function call, got: {:?}", call_names);
-        assert!(call_names.iter().any(|n| n.contains("method_call")),
-            "Expected method_call, got: {:?}", call_names);
-        assert!(call_names.iter().any(|n| n.contains("conditional_call")),
-            "Expected conditional_call, got: {:?}", call_names);
+        assert!(
+            call_names.iter().any(|n| n.contains("helper_function")),
+            "Expected helper_function call, got: {:?}",
+            call_names
+        );
+        assert!(
+            call_names.iter().any(|n| n.contains("method_call")),
+            "Expected method_call, got: {:?}",
+            call_names
+        );
+        assert!(
+            call_names.iter().any(|n| n.contains("conditional_call")),
+            "Expected conditional_call, got: {:?}",
+            call_names
+        );
     }
 }

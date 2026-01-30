@@ -4,11 +4,11 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+use super::{LLMError, StreamChunk, LLM};
 use crate::config::{
-    DEFAULT_MAX_TOKENS, DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_MODEL,
-    DEFAULT_OPENAI_URL, DEFAULT_OPENROUTER_URL,
+    DEFAULT_MAX_TOKENS, DEFAULT_OLLAMA_URL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_URL,
+    DEFAULT_OPENROUTER_URL,
 };
-use super::{LLMError, LLM, StreamChunk};
 
 /// OpenAI-compatible API client.
 ///
@@ -60,10 +60,9 @@ impl OpenAIClient {
     /// Creates a client for OpenAI from environment variables.
     /// Uses OPENAI_API_KEY and optionally OPENAI_MODEL.
     pub fn openai_from_env() -> Result<Self, LLMError> {
-        let api_key = std::env::var("OPENAI_API_KEY")
-            .map_err(|_| LLMError::MissingApiKey)?;
-        let model = std::env::var("OPENAI_MODEL")
-            .unwrap_or_else(|_| DEFAULT_OPENAI_MODEL.to_string());
+        let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| LLMError::MissingApiKey)?;
+        let model =
+            std::env::var("OPENAI_MODEL").unwrap_or_else(|_| DEFAULT_OPENAI_MODEL.to_string());
         Ok(Self::openai(api_key, model))
     }
 
@@ -80,8 +79,8 @@ impl OpenAIClient {
     /// Creates a client from environment variables.
     /// Uses ARQ_LLM_BASE_URL, ARQ_LLM_API_KEY, and ARQ_LLM_MODEL.
     pub fn from_env() -> Result<Self, LLMError> {
-        let base_url = std::env::var("ARQ_LLM_BASE_URL")
-            .unwrap_or_else(|_| DEFAULT_OPENAI_URL.to_string());
+        let base_url =
+            std::env::var("ARQ_LLM_BASE_URL").unwrap_or_else(|_| DEFAULT_OPENAI_URL.to_string());
         let api_key = std::env::var("ARQ_LLM_API_KEY")
             .or_else(|_| std::env::var("OPENAI_API_KEY"))
             .unwrap_or_default();
@@ -98,7 +97,11 @@ impl OpenAIClient {
         self
     }
 
-    async fn send_request(&self, messages: Vec<ChatMessage>, system: Option<&str>) -> Result<String, LLMError> {
+    async fn send_request(
+        &self,
+        messages: Vec<ChatMessage>,
+        system: Option<&str>,
+    ) -> Result<String, LLMError> {
         let mut all_messages = Vec::new();
 
         // Add system message if provided
@@ -121,7 +124,8 @@ impl OpenAIClient {
 
         let url = format!("{}/chat/completions", self.base_url);
 
-        let mut req = self.client
+        let mut req = self
+            .client
             .post(&url)
             .header("content-type", "application/json");
 
@@ -147,16 +151,19 @@ impl OpenAIClient {
         }
 
         // Get response as text first for better error messages
-        let response_text = response.text().await
+        let response_text = response
+            .text()
+            .await
             .map_err(|e| LLMError::Network(format!("Failed to read response body: {}", e)))?;
 
         // Try to parse as JSON
-        let chat_response: ChatResponse = serde_json::from_str(&response_text)
-            .map_err(|e| LLMError::ParseError(format!(
+        let chat_response: ChatResponse = serde_json::from_str(&response_text).map_err(|e| {
+            LLMError::ParseError(format!(
                 "Failed to parse response: {}. Response: {}",
                 e,
                 &response_text[..response_text.len().min(500)]
-            )))?;
+            ))
+        })?;
 
         // Extract content from first choice
         let content = chat_response
@@ -198,7 +205,8 @@ impl OpenAIClient {
 
         let url = format!("{}/chat/completions", self.base_url);
 
-        let mut req = self.client
+        let mut req = self
+            .client
             .post(&url)
             .header("content-type", "application/json");
 
@@ -262,11 +270,7 @@ impl LLM for OpenAIClient {
         self.send_request(messages, None).await
     }
 
-    async fn complete_with_system(
-        &self,
-        system: &str,
-        prompt: &str,
-    ) -> Result<String, LLMError> {
+    async fn complete_with_system(&self, system: &str, prompt: &str) -> Result<String, LLMError> {
         let messages = vec![ChatMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
@@ -288,7 +292,8 @@ impl LLM for OpenAIClient {
             ..Default::default()
         }];
 
-        self.send_streaming_request(messages, Some(system), tx).await
+        self.send_streaming_request(messages, Some(system), tx)
+            .await
     }
 
     fn supports_streaming(&self) -> bool {
@@ -376,4 +381,3 @@ fn parse_openai_sse_line(line: &str) -> Option<String> {
         .and_then(|c| c.delta.content)
         .filter(|s| !s.is_empty())
 }
-

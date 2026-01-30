@@ -1,4 +1,4 @@
-use arq_core::{Task, Phase};
+use arq_core::{Phase, Task};
 
 #[test]
 fn test_new_task() {

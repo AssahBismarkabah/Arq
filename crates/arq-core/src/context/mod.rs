@@ -1,7 +1,7 @@
+use ignore::WalkBuilder;
 use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use ignore::WalkBuilder;
 
 use crate::config::ContextConfig;
 
@@ -137,18 +137,25 @@ impl ContextBuilder {
             }
 
             // Check extension
-            let extension = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
+            let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-            if !self.config.include_extensions.iter().any(|e| e == extension) {
+            if !self
+                .config
+                .include_extensions
+                .iter()
+                .any(|e| e == extension)
+            {
                 continue;
             }
 
             // Check if in excluded directory
             let path_str = path.to_string_lossy();
-            if self.config.exclude_dirs.iter().any(|d| path_str.contains(d.as_str())) {
+            if self
+                .config
+                .exclude_dirs
+                .iter()
+                .any(|d| path_str.contains(d.as_str()))
+            {
                 continue;
             }
 
@@ -232,4 +239,3 @@ pub enum ContextError {
     #[error("IO error at {0}: {1}")]
     IoError(PathBuf, String),
 }
-

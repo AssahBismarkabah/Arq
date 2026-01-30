@@ -7,19 +7,19 @@
 //! - Streaming LLM responses
 
 mod app;
+mod components;
 mod event;
 mod ui;
-mod components;
 
-use std::io::stdout;
 use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::prelude::*;
+use std::io::stdout;
 
-use arq_core::{Config, FileStorage, TaskManager};
 use app::App;
+use arq_core::{Config, FileStorage, TaskManager};
 
 /// Run the TUI application.
 pub async fn run(

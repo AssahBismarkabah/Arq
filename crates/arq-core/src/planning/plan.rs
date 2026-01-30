@@ -17,7 +17,7 @@ pub struct Plan {
     /// Files to modify
     pub files_to_modify: Vec<FileModification>,
     /// Dependencies to add (package names)
-    pub dependencies_to_add: Vec<String>,   
+    pub dependencies_to_add: Vec<String>,
 }
 
 impl Plan {
@@ -104,4 +104,3 @@ pub struct FunctionSignature {
     /// Description of behavior
     pub behavior: Vec<String>,
 }
-

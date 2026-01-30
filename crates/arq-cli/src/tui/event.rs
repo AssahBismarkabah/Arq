@@ -1,8 +1,8 @@
 //! Event handling for the TUI.
 
-use std::time::Duration;
 use crossterm::event::{KeyEvent, KeyEventKind};
 use futures::{FutureExt, StreamExt};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use arq_core::{ResearchDoc, ResearchProgress};

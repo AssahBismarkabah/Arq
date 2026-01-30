@@ -4,11 +4,11 @@ use tree_sitter::Node;
 
 use super::result::ParseResult;
 use super::traits::{Parser, ParserCapability};
-use super::treesitter::{TreeSitterParser, extract_doc_comment};
-use crate::knowledge::ontology::edges::{CallsEdge, CallType, ContainsEdge};
+use super::treesitter::{extract_doc_comment, TreeSitterParser};
+use crate::knowledge::ontology::edges::{CallType, CallsEdge, ContainsEdge};
 use crate::knowledge::ontology::nodes::{
-    EnumEntity, EnumVariant, FunctionEntity, StructEntity, TraitEntity,
-    Visibility, FieldInfo, Parameter,
+    EnumEntity, EnumVariant, FieldInfo, FunctionEntity, Parameter, StructEntity, TraitEntity,
+    Visibility,
 };
 
 /// Java parser using tree-sitter.
@@ -19,20 +19,23 @@ pub struct JavaParser {
 impl JavaParser {
     pub fn new() -> Self {
         Self {
-            base: TreeSitterParser::new(
-                tree_sitter_java::LANGUAGE.into(),
-                "Java",
-                &["java"],
-            ),
+            base: TreeSitterParser::new(tree_sitter_java::LANGUAGE.into(), "Java", &["java"]),
         }
     }
 
-    fn extract_method(&self, node: &Node, content: &str, path: &str, class_name: Option<&str>) -> Option<FunctionEntity> {
+    fn extract_method(
+        &self,
+        node: &Node,
+        content: &str,
+        path: &str,
+        class_name: Option<&str>,
+    ) -> Option<FunctionEntity> {
         let name_node = node.child_by_field_name("name")?;
         let name = TreeSitterParser::node_text(&name_node, content).to_string();
 
         let params = self.extract_parameters(node, content);
-        let return_type = node.child_by_field_name("type")
+        let return_type = node
+            .child_by_field_name("type")
             .map(|n| TreeSitterParser::node_text(&n, content).to_string());
 
         let qualified_name = if let Some(class) = class_name {
@@ -117,7 +120,8 @@ impl JavaParser {
             for child in body.children(&mut cursor) {
                 if child.kind() == "method_declaration" {
                     if let Some(method_name) = child.child_by_field_name("name") {
-                        required_methods.push(TreeSitterParser::node_text(&method_name, content).to_string());
+                        required_methods
+                            .push(TreeSitterParser::node_text(&method_name, content).to_string());
                     }
                 }
             }
@@ -196,11 +200,13 @@ impl JavaParser {
             let mut cursor = params_node.walk();
             for child in params_node.children(&mut cursor) {
                 if child.kind() == "formal_parameter" || child.kind() == "spread_parameter" {
-                    let name = child.child_by_field_name("name")
+                    let name = child
+                        .child_by_field_name("name")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_default();
 
-                    let type_name = child.child_by_field_name("type")
+                    let type_name = child
+                        .child_by_field_name("type")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_else(|| "Object".to_string());
 
@@ -229,7 +235,8 @@ impl JavaParser {
                     let modifiers = self.extract_child_modifiers(&child, content);
                     let visibility = self.modifiers_to_visibility(&modifiers);
 
-                    let type_name = child.child_by_field_name("type")
+                    let type_name = child
+                        .child_by_field_name("type")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_default();
 
@@ -239,7 +246,8 @@ impl JavaParser {
                         if decl.kind() == "variable_declarator" {
                             if let Some(name_node) = decl.child_by_field_name("name") {
                                 fields.push(FieldInfo {
-                                    name: TreeSitterParser::node_text(&name_node, content).to_string(),
+                                    name: TreeSitterParser::node_text(&name_node, content)
+                                        .to_string(),
                                     type_name: type_name.clone(),
                                     visibility: visibility.clone(),
                                     attributes: modifiers.clone(),
@@ -282,7 +290,8 @@ impl JavaParser {
         node.child_by_field_name("type_parameters")
             .map(|params| {
                 let mut cursor = params.walk();
-                params.children(&mut cursor)
+                params
+                    .children(&mut cursor)
                     .filter(|c| c.kind() == "type_parameter")
                     .map(|c| TreeSitterParser::node_text(&c, content).to_string())
                     .collect()
@@ -344,7 +353,13 @@ impl JavaParser {
         self.extract_calls_recursive(node, content, caller_id, result);
     }
 
-    fn extract_calls_recursive(&self, node: &Node, content: &str, caller_id: &str, result: &mut ParseResult) {
+    fn extract_calls_recursive(
+        &self,
+        node: &Node,
+        content: &str,
+        caller_id: &str,
+        result: &mut ParseResult,
+    ) {
         match node.kind() {
             "method_invocation" => {
                 // Get method name
@@ -376,7 +391,14 @@ impl JavaParser {
         }
     }
 
-    fn process_node(&self, node: Node, content: &str, path: &str, result: &mut ParseResult, class_context: Option<&str>) {
+    fn process_node(
+        &self,
+        node: Node,
+        content: &str,
+        path: &str,
+        result: &mut ParseResult,
+        class_context: Option<&str>,
+    ) {
         match node.kind() {
             "method_declaration" => {
                 if let Some(func) = self.extract_method(&node, content, path, class_context) {

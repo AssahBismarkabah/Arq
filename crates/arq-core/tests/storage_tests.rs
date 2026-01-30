@@ -85,6 +85,9 @@ fn test_custom_config() {
 
     // Verify custom path is used (now under projects/{hash}/)
     let project_dir = config.project_dir();
-    let custom_path = project_dir.join("my-tasks").join(&task.id).join("metadata.json");
+    let custom_path = project_dir
+        .join("my-tasks")
+        .join(&task.id)
+        .join("metadata.json");
     assert!(custom_path.exists());
 }

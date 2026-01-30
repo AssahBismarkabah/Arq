@@ -132,4 +132,3 @@ pub enum ConformanceStatus {
     /// Code significantly deviates from spec
     Failed,
 }
-

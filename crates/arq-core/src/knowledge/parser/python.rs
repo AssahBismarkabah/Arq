@@ -5,9 +5,9 @@ use tree_sitter::Node;
 use super::result::ParseResult;
 use super::traits::{Parser, ParserCapability};
 use super::treesitter::TreeSitterParser;
-use crate::knowledge::ontology::edges::{CallsEdge, CallType, ContainsEdge};
+use crate::knowledge::ontology::edges::{CallType, CallsEdge, ContainsEdge};
 use crate::knowledge::ontology::nodes::{
-    FunctionEntity, StructEntity, Visibility, FieldInfo, Parameter,
+    FieldInfo, FunctionEntity, Parameter, StructEntity, Visibility,
 };
 
 /// Python parser using tree-sitter.
@@ -31,14 +31,16 @@ impl PythonParser {
         let name = TreeSitterParser::node_text(&name_node, content).to_string();
 
         let params = self.extract_parameters(node, content);
-        let return_type = node.child_by_field_name("return_type")
+        let return_type = node
+            .child_by_field_name("return_type")
             .map(|n| TreeSitterParser::node_text(&n, content).to_string());
 
-        let is_async = node.kind() == "async_function_definition" ||
-            TreeSitterParser::node_text(node, content).starts_with("async ");
+        let is_async = node.kind() == "async_function_definition"
+            || TreeSitterParser::node_text(node, content).starts_with("async ");
 
         // Check for decorators
-        let _decorators: Vec<String> = node.children(&mut node.walk())
+        let _decorators: Vec<String> = node
+            .children(&mut node.walk())
             .filter(|c| c.kind() == "decorator")
             .map(|d| TreeSitterParser::node_text(&d, content).to_string())
             .collect();
@@ -72,7 +74,8 @@ impl PythonParser {
         let fields = self.extract_class_fields(node, content);
 
         // Extract base classes
-        let bases: Vec<String> = node.child_by_field_name("superclasses")
+        let bases: Vec<String> = node
+            .child_by_field_name("superclasses")
             .map(|sc| {
                 let mut cursor = sc.walk();
                 sc.children(&mut cursor)
@@ -117,12 +120,18 @@ impl PythonParser {
                         }
                     }
                     "typed_parameter" | "default_parameter" | "typed_default_parameter" => {
-                        let name = child.child_by_field_name("name")
-                            .or_else(|| child.children(&mut child.walk()).find(|c| c.kind() == "identifier"))
+                        let name = child
+                            .child_by_field_name("name")
+                            .or_else(|| {
+                                child
+                                    .children(&mut child.walk())
+                                    .find(|c| c.kind() == "identifier")
+                            })
                             .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                             .unwrap_or_default();
 
-                        let type_name = child.child_by_field_name("type")
+                        let type_name = child
+                            .child_by_field_name("type")
                             .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                             .unwrap_or_else(|| "Any".to_string());
 
@@ -153,7 +162,8 @@ impl PythonParser {
                 let mut block_cursor = child.walk();
                 for stmt in child.children(&mut block_cursor) {
                     if stmt.kind() == "function_definition" {
-                        let name = stmt.child_by_field_name("name")
+                        let name = stmt
+                            .child_by_field_name("name")
                             .map(|n| TreeSitterParser::node_text(&n, content));
                         if name == Some("__init__") {
                             // Parse __init__ for self.x assignments
@@ -172,11 +182,20 @@ impl PythonParser {
         self.walk_for_assignments(init_node, content, fields, &mut cursor);
     }
 
-    fn walk_for_assignments(&self, node: &Node, content: &str, fields: &mut Vec<FieldInfo>, _cursor: &mut tree_sitter::TreeCursor) {
+    fn walk_for_assignments(
+        &self,
+        node: &Node,
+        content: &str,
+        fields: &mut Vec<FieldInfo>,
+        _cursor: &mut tree_sitter::TreeCursor,
+    ) {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             if child.kind() == "expression_statement" {
-                if let Some(assign) = child.children(&mut child.walk()).find(|c| c.kind() == "assignment") {
+                if let Some(assign) = child
+                    .children(&mut child.walk())
+                    .find(|c| c.kind() == "assignment")
+                {
                     if let Some(left) = assign.child_by_field_name("left") {
                         let left_text = TreeSitterParser::node_text(&left, content);
                         if left_text.starts_with("self.") {
@@ -224,7 +243,9 @@ impl PythonParser {
 
         if first_stmt.kind() == "expression_statement" {
             let mut stmt_cursor = first_stmt.walk();
-            let string_node = first_stmt.children(&mut stmt_cursor).find(|c| c.kind() == "string");
+            let string_node = first_stmt
+                .children(&mut stmt_cursor)
+                .find(|c| c.kind() == "string");
             if let Some(string_node) = string_node {
                 let text = TreeSitterParser::node_text(&string_node, content);
                 // Remove quotes
@@ -248,7 +269,13 @@ impl PythonParser {
         self.extract_calls_recursive(node, content, caller_id, result);
     }
 
-    fn extract_calls_recursive(&self, node: &Node, content: &str, caller_id: &str, result: &mut ParseResult) {
+    fn extract_calls_recursive(
+        &self,
+        node: &Node,
+        content: &str,
+        caller_id: &str,
+        result: &mut ParseResult,
+    ) {
         if node.kind() == "call" {
             // Get the function being called
             if let Some(func_node) = node.child_by_field_name("function") {
@@ -256,7 +283,10 @@ impl PythonParser {
                     "attribute" => {
                         // Method call: obj.method()
                         if let Some(attr) = func_node.child_by_field_name("attribute") {
-                            (TreeSitterParser::node_text(&attr, content).to_string(), CallType::Method)
+                            (
+                                TreeSitterParser::node_text(&attr, content).to_string(),
+                                CallType::Method,
+                            )
                         } else {
                             return;
                         }
@@ -264,7 +294,12 @@ impl PythonParser {
                     "identifier" => {
                         // Direct call: func()
                         let name = TreeSitterParser::node_text(&func_node, content).to_string();
-                        let call_type = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                        let call_type = if name
+                            .chars()
+                            .next()
+                            .map(|c| c.is_uppercase())
+                            .unwrap_or(false)
+                        {
                             CallType::Constructor
                         } else {
                             CallType::Direct

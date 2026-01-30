@@ -46,7 +46,11 @@ impl CodeChunk {
     }
 
     /// Set the entity this chunk belongs to.
-    pub fn with_entity(mut self, entity_id: impl Into<String>, entity_type: impl Into<String>) -> Self {
+    pub fn with_entity(
+        mut self,
+        entity_id: impl Into<String>,
+        entity_type: impl Into<String>,
+    ) -> Self {
         self.entity_id = Some(entity_id.into());
         self.entity_type = entity_type.into();
         self

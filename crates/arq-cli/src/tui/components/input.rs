@@ -2,7 +2,7 @@
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, BorderType, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 use crate::tui::app::{App, InputMode};
@@ -37,9 +37,7 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
         Style::default().fg(Color::DarkGray)
     };
 
-    let input = Paragraph::new(input_text)
-        .style(text_style)
-        .block(block);
+    let input = Paragraph::new(input_text).style(text_style).block(block);
 
     frame.render_widget(input, area);
 

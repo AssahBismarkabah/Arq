@@ -2,7 +2,7 @@
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, BorderType, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 use crate::tui::app::{App, MessageRole};
@@ -83,11 +83,15 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     for msg in &app.chat_messages {
         let (prefix_style, content_style) = match msg.role {
             MessageRole::User => (
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
                 Style::default().fg(Color::White),
             ),
             MessageRole::Assistant => (
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
                 Style::default().fg(Color::White),
             ),
             MessageRole::System => (
@@ -126,7 +130,9 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
                 all_lines.push(Line::from(vec![
                     Span::styled(
                         "[Arq] ".to_string(),
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(line, Style::default().fg(Color::White)),
                 ]));
@@ -146,7 +152,9 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     // Auto-scroll to bottom unless user has scrolled up
     let start_index = if app.scroll_offset > 0 {
         // User has scrolled up - show earlier content
-        total_lines.saturating_sub(visible_height).saturating_sub(app.scroll_offset)
+        total_lines
+            .saturating_sub(visible_height)
+            .saturating_sub(app.scroll_offset)
     } else {
         // Auto-scroll to bottom
         total_lines.saturating_sub(visible_height)

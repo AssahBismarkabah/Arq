@@ -152,4 +152,3 @@ pub enum TaskError {
     #[error("Wrong phase: expected {expected:?}, got {actual:?}")]
     WrongPhase { expected: Phase, actual: Phase },
 }
-

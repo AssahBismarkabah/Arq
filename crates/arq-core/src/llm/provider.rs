@@ -1,10 +1,8 @@
+use super::{ClaudeClient, LLMError, OpenAIClient, LLM};
 use crate::config::{
-    LLMConfig,
-    DEFAULT_ANTHROPIC_MODEL,
-    DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL,
+    LLMConfig, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL,
     DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_URL,
 };
-use super::{ClaudeClient, LLMError, OpenAIClient, LLM};
 
 /// LLM Provider configuration.
 #[derive(Debug, Clone)]
@@ -47,7 +45,10 @@ impl Provider {
             },
             "ollama" => Provider::Ollama {
                 base_url: config.base_url.clone(),
-                model: config.model.clone().unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string()),
+                model: config
+                    .model
+                    .clone()
+                    .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string()),
             },
             _ => Provider::OpenAI {
                 base_url: config.base_url.clone(),
@@ -60,7 +61,11 @@ impl Provider {
     /// Creates an LLM client from the provider configuration.
     pub fn build(self) -> Result<Box<dyn LLM>, LLMError> {
         match self {
-            Provider::OpenAI { base_url, api_key, model } => {
+            Provider::OpenAI {
+                base_url,
+                api_key,
+                model,
+            } => {
                 let base = base_url
                     .or_else(|| std::env::var("ARQ_LLM_BASE_URL").ok())
                     .or_else(|| std::env::var("OPENAI_BASE_URL").ok())
@@ -119,11 +124,13 @@ impl Provider {
                     base_url: None,
                     api_key: None,
                     model: None,
-                }.build(),
+                }
+                .build(),
                 "anthropic" | "claude" => Provider::Anthropic {
                     api_key: None,
                     model: None,
-                }.build(),
+                }
+                .build(),
                 "ollama" => {
                     let model = std::env::var("ARQ_LLM_MODEL")
                         .or_else(|_| std::env::var("OLLAMA_MODEL"))
@@ -131,7 +138,8 @@ impl Provider {
                     Provider::Ollama {
                         base_url: None,
                         model,
-                    }.build()
+                    }
+                    .build()
                 }
                 other => Err(LLMError::UnknownProvider(other.to_string())),
             };
@@ -143,14 +151,16 @@ impl Provider {
                 base_url: None,
                 api_key: None,
                 model: None,
-            }.build();
+            }
+            .build();
         }
 
         if std::env::var("ANTHROPIC_API_KEY").is_ok() {
             return Provider::Anthropic {
                 api_key: None,
                 model: None,
-            }.build();
+            }
+            .build();
         }
 
         if std::env::var("OPENAI_API_KEY").is_ok() {
@@ -158,7 +168,8 @@ impl Provider {
                 base_url: None,
                 api_key: None,
                 model: None,
-            }.build();
+            }
+            .build();
         }
 
         if std::env::var("OLLAMA_HOST").is_ok() {
@@ -168,7 +179,8 @@ impl Provider {
             return Provider::Ollama {
                 base_url: None,
                 model,
-            }.build();
+            }
+            .build();
         }
 
         // Default to OpenAI-compatible (might work with local server)
@@ -176,7 +188,7 @@ impl Provider {
             base_url: None,
             api_key: None,
             model: None,
-        }.build()
+        }
+        .build()
     }
 }
-

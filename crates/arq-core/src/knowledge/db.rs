@@ -352,8 +352,12 @@ impl KnowledgeDb {
     }
 
     /// Insert a struct node.
-    pub async fn insert_struct(&self, s: &super::models::StructNode) -> Result<String, KnowledgeError> {
-        let result: Option<super::models::StructNode> = self.db.create("struct").content(s.clone()).await?;
+    pub async fn insert_struct(
+        &self,
+        s: &super::models::StructNode,
+    ) -> Result<String, KnowledgeError> {
+        let result: Option<super::models::StructNode> =
+            self.db.create("struct").content(s.clone()).await?;
         let id = result
             .and_then(|r| r.id)
             .map(|t| t.to_string())
@@ -362,8 +366,12 @@ impl KnowledgeDb {
     }
 
     /// Insert a function node.
-    pub async fn insert_function(&self, f: &super::models::FunctionNode) -> Result<String, KnowledgeError> {
-        let result: Option<super::models::FunctionNode> = self.db.create("fn_node").content(f.clone()).await?;
+    pub async fn insert_function(
+        &self,
+        f: &super::models::FunctionNode,
+    ) -> Result<String, KnowledgeError> {
+        let result: Option<super::models::FunctionNode> =
+            self.db.create("fn_node").content(f.clone()).await?;
         let id = result
             .and_then(|r| r.id)
             .map(|t| t.to_string())
@@ -372,7 +380,11 @@ impl KnowledgeDb {
     }
 
     /// Create a "contains" relation (file contains struct/function).
-    pub async fn relate_contains(&self, file_path: &str, entity_id: &str) -> Result<(), KnowledgeError> {
+    pub async fn relate_contains(
+        &self,
+        file_path: &str,
+        entity_id: &str,
+    ) -> Result<(), KnowledgeError> {
         // First find the file record
         let file: Option<FileNode> = self
             .db
@@ -391,7 +403,11 @@ impl KnowledgeDb {
     }
 
     /// Create a "calls" relation (function calls another function).
-    pub async fn relate_calls(&self, caller_id: &str, callee_name: &str) -> Result<(), KnowledgeError> {
+    pub async fn relate_calls(
+        &self,
+        caller_id: &str,
+        callee_name: &str,
+    ) -> Result<(), KnowledgeError> {
         // First find if the callee exists
         let callee: Option<super::models::FunctionNode> = self
             .db
@@ -427,7 +443,11 @@ impl KnowledgeDb {
     }
 
     /// Create a "has_method" relation (struct has method).
-    pub async fn relate_has_method(&self, struct_id: &str, method_id: &str) -> Result<(), KnowledgeError> {
+    pub async fn relate_has_method(
+        &self,
+        struct_id: &str,
+        method_id: &str,
+    ) -> Result<(), KnowledgeError> {
         let query = format!("RELATE {}->has_method->{}", struct_id, method_id);
         self.db.query(&query).await?;
         Ok(())
@@ -526,14 +546,20 @@ impl KnowledgeDb {
     }
 
     /// List all functions in the database.
-    pub async fn list_functions(&self, limit: usize) -> Result<Vec<super::models::FunctionNode>, KnowledgeError> {
+    pub async fn list_functions(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<super::models::FunctionNode>, KnowledgeError> {
         let query = format!("SELECT * FROM fn_node LIMIT {}", limit);
         let results: Vec<super::models::FunctionNode> = self.db.query(&query).await?.take(0)?;
         Ok(results)
     }
 
     /// Find a function by name.
-    pub async fn find_function_by_name(&self, name: &str) -> Result<Option<super::models::FunctionNode>, KnowledgeError> {
+    pub async fn find_function_by_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<super::models::FunctionNode>, KnowledgeError> {
         let result: Option<super::models::FunctionNode> = self
             .db
             .query("SELECT * FROM fn_node WHERE name = $name LIMIT 1")
@@ -591,15 +617,12 @@ impl KnowledgeDb {
         &self,
         func: &super::ontology::nodes::FunctionEntity,
     ) -> Result<String, KnowledgeError> {
-        let _: Option<serde_json::Value> = self
-            .db
-            .create("fn_node")
-            .content(func.clone())
-            .await?;
+        let _: Option<serde_json::Value> = self.db.create("fn_node").content(func.clone()).await?;
 
-        let id = func.id.clone().unwrap_or_else(|| {
-            format!("fn_node:{}", func.qualified_name)
-        });
+        let id = func
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("fn_node:{}", func.qualified_name));
         Ok(id)
     }
 
@@ -608,15 +631,11 @@ impl KnowledgeDb {
         &self,
         s: &super::ontology::nodes::StructEntity,
     ) -> Result<String, KnowledgeError> {
-        let _: Option<serde_json::Value> = self
-            .db
-            .create("struct_node")
-            .content(s.clone())
-            .await?;
+        let _: Option<serde_json::Value> = self.db.create("struct_node").content(s.clone()).await?;
 
-        let id = s.id.clone().unwrap_or_else(|| {
-            format!("struct_node:{}", s.qualified_name)
-        });
+        let id =
+            s.id.clone()
+                .unwrap_or_else(|| format!("struct_node:{}", s.qualified_name));
         Ok(id)
     }
 
@@ -625,15 +644,11 @@ impl KnowledgeDb {
         &self,
         t: &super::ontology::nodes::TraitEntity,
     ) -> Result<String, KnowledgeError> {
-        let _: Option<serde_json::Value> = self
-            .db
-            .create("trait_node")
-            .content(t.clone())
-            .await?;
+        let _: Option<serde_json::Value> = self.db.create("trait_node").content(t.clone()).await?;
 
-        let id = t.id.clone().unwrap_or_else(|| {
-            format!("trait_node:{}", t.qualified_name)
-        });
+        let id =
+            t.id.clone()
+                .unwrap_or_else(|| format!("trait_node:{}", t.qualified_name));
         Ok(id)
     }
 
@@ -642,11 +657,7 @@ impl KnowledgeDb {
         &self,
         i: &super::ontology::nodes::ImplEntity,
     ) -> Result<String, KnowledgeError> {
-        let _: Option<serde_json::Value> = self
-            .db
-            .create("impl_node")
-            .content(i.clone())
-            .await?;
+        let _: Option<serde_json::Value> = self.db.create("impl_node").content(i.clone()).await?;
 
         let id = i.id.clone().unwrap_or_else(|| {
             if let Some(ref trait_name) = i.trait_name {
@@ -663,15 +674,11 @@ impl KnowledgeDb {
         &self,
         e: &super::ontology::nodes::EnumEntity,
     ) -> Result<String, KnowledgeError> {
-        let _: Option<serde_json::Value> = self
-            .db
-            .create("enum_node")
-            .content(e.clone())
-            .await?;
+        let _: Option<serde_json::Value> = self.db.create("enum_node").content(e.clone()).await?;
 
-        let id = e.id.clone().unwrap_or_else(|| {
-            format!("enum_node:{}", e.qualified_name)
-        });
+        let id =
+            e.id.clone()
+                .unwrap_or_else(|| format!("enum_node:{}", e.qualified_name));
         Ok(id)
     }
 
@@ -680,15 +687,11 @@ impl KnowledgeDb {
         &self,
         c: &super::ontology::nodes::ConstantEntity,
     ) -> Result<String, KnowledgeError> {
-        let _: Option<serde_json::Value> = self
-            .db
-            .create("const_node")
-            .content(c.clone())
-            .await?;
+        let _: Option<serde_json::Value> = self.db.create("const_node").content(c.clone()).await?;
 
-        let id = c.id.clone().unwrap_or_else(|| {
-            format!("const_node:{}", c.qualified_name)
-        });
+        let id =
+            c.id.clone()
+                .unwrap_or_else(|| format!("const_node:{}", c.qualified_name));
         Ok(id)
     }
 
@@ -711,7 +714,7 @@ impl KnowledgeDb {
                 // For other relations, try RELATE with properly escaped IDs
                 let from_escaped = Self::escape_record_id(from_id);
                 let to_escaped = Self::escape_record_id(to_id);
-                let query = format!("RELATE {}->{}->{}",from_escaped, relation, to_escaped);
+                let query = format!("RELATE {}->{}->{}", from_escaped, relation, to_escaped);
                 let _ = self.db.query(&query).await;
             }
         }
@@ -719,7 +722,11 @@ impl KnowledgeDb {
     }
 
     /// Store a call edge as a regular record.
-    pub async fn store_call_edge(&self, caller_id: &str, callee_id: &str) -> Result<(), KnowledgeError> {
+    pub async fn store_call_edge(
+        &self,
+        caller_id: &str,
+        callee_id: &str,
+    ) -> Result<(), KnowledgeError> {
         #[derive(serde::Serialize)]
         struct CallRecord {
             caller_id: String,
@@ -729,8 +736,16 @@ impl KnowledgeDb {
         }
 
         // Extract names from IDs (format: function:path:name)
-        let caller_name = caller_id.rsplit(':').next().unwrap_or(caller_id).to_string();
-        let callee_name = callee_id.rsplit(':').next().unwrap_or(callee_id).to_string();
+        let caller_name = caller_id
+            .rsplit(':')
+            .next()
+            .unwrap_or(caller_id)
+            .to_string();
+        let callee_name = callee_id
+            .rsplit(':')
+            .next()
+            .unwrap_or(callee_id)
+            .to_string();
 
         let record = CallRecord {
             caller_id: caller_id.to_string(),
@@ -744,7 +759,11 @@ impl KnowledgeDb {
     }
 
     /// Store an implements edge as a regular record.
-    pub async fn store_implements_edge(&self, from_id: &str, to_id: &str) -> Result<(), KnowledgeError> {
+    pub async fn store_implements_edge(
+        &self,
+        from_id: &str,
+        to_id: &str,
+    ) -> Result<(), KnowledgeError> {
         #[derive(serde::Serialize)]
         struct ImplementsRecord {
             impl_id: String,
@@ -781,7 +800,15 @@ impl KnowledgeDb {
         let path_owned = path.to_string();
 
         // Delete from all node tables
-        for table in &["fn_node", "struct_node", "trait_node", "impl_node", "enum_node", "const_node", "chunk"] {
+        for table in &[
+            "fn_node",
+            "struct_node",
+            "trait_node",
+            "impl_node",
+            "enum_node",
+            "const_node",
+            "chunk",
+        ] {
             self.db
                 .query(&format!("DELETE {} WHERE file_path = $path", table))
                 .bind(("path", path_owned.clone()))
@@ -827,7 +854,9 @@ impl KnowledgeDb {
     }
 
     /// List all struct entities.
-    pub async fn list_structs(&self) -> Result<Vec<super::ontology::nodes::StructEntity>, KnowledgeError> {
+    pub async fn list_structs(
+        &self,
+    ) -> Result<Vec<super::ontology::nodes::StructEntity>, KnowledgeError> {
         // Select all fields except id to avoid SurrealDB Thing deserialization issues
         let results: Vec<super::ontology::nodes::StructEntity> = self
             .db
@@ -838,7 +867,9 @@ impl KnowledgeDb {
     }
 
     /// List all trait/interface entities.
-    pub async fn list_traits(&self) -> Result<Vec<super::ontology::nodes::TraitEntity>, KnowledgeError> {
+    pub async fn list_traits(
+        &self,
+    ) -> Result<Vec<super::ontology::nodes::TraitEntity>, KnowledgeError> {
         let results: Vec<super::ontology::nodes::TraitEntity> = self
             .db
             .query("SELECT name, qualified_name, file_path, start_line, end_line, visibility, generics, super_traits, required_methods, provided_methods, associated_types, doc_comment FROM trait_node")
@@ -848,7 +879,9 @@ impl KnowledgeDb {
     }
 
     /// List all enum entities.
-    pub async fn list_enums(&self) -> Result<Vec<super::ontology::nodes::EnumEntity>, KnowledgeError> {
+    pub async fn list_enums(
+        &self,
+    ) -> Result<Vec<super::ontology::nodes::EnumEntity>, KnowledgeError> {
         let results: Vec<super::ontology::nodes::EnumEntity> = self
             .db
             .query("SELECT name, qualified_name, file_path, start_line, end_line, visibility, generics, variants, derives, doc_comment FROM enum_node")
@@ -858,7 +891,9 @@ impl KnowledgeDb {
     }
 
     /// List all impl entities.
-    pub async fn list_impls(&self) -> Result<Vec<super::ontology::nodes::ImplEntity>, KnowledgeError> {
+    pub async fn list_impls(
+        &self,
+    ) -> Result<Vec<super::ontology::nodes::ImplEntity>, KnowledgeError> {
         let results: Vec<super::ontology::nodes::ImplEntity> = self
             .db
             .query("SELECT target_type, trait_name, file_path, start_line, end_line, generics, where_clause, methods FROM impl_node")
@@ -869,21 +904,14 @@ impl KnowledgeDb {
 
     /// List all call edges.
     pub async fn list_calls(&self) -> Result<Vec<CallInfo>, KnowledgeError> {
-        let results: Vec<CallInfo> = self
-            .db
-            .query("SELECT * FROM calls")
-            .await?
-            .take(0)?;
+        let results: Vec<CallInfo> = self.db.query("SELECT * FROM calls").await?.take(0)?;
         Ok(results)
     }
 
     /// List all implements edges (impl -> trait).
     pub async fn list_implements(&self) -> Result<Vec<ImplementsInfo>, KnowledgeError> {
-        let results: Vec<ImplementsInfo> = self
-            .db
-            .query("SELECT * FROM implements")
-            .await?
-            .take(0)?;
+        let results: Vec<ImplementsInfo> =
+            self.db.query("SELECT * FROM implements").await?.take(0)?;
         Ok(results)
     }
 
@@ -894,16 +922,14 @@ impl KnowledgeDb {
             path: String,
         }
 
-        let results: Vec<FilePathResult> = self
-            .db
-            .query("SELECT path FROM file")
-            .await?
-            .take(0)?;
+        let results: Vec<FilePathResult> = self.db.query("SELECT path FROM file").await?.take(0)?;
         Ok(results.into_iter().map(|r| r.path).collect())
     }
 
     /// List all function entities (extended).
-    pub async fn list_function_entities(&self) -> Result<Vec<super::ontology::nodes::FunctionEntity>, KnowledgeError> {
+    pub async fn list_function_entities(
+        &self,
+    ) -> Result<Vec<super::ontology::nodes::FunctionEntity>, KnowledgeError> {
         // Select all fields except id to avoid SurrealDB Thing deserialization issues
         let results: Vec<super::ontology::nodes::FunctionEntity> = self
             .db

@@ -4,11 +4,10 @@ use tree_sitter::Node;
 
 use super::result::ParseResult;
 use super::traits::{Parser, ParserCapability};
-use super::treesitter::{TreeSitterParser, extract_doc_comment};
-use crate::knowledge::ontology::edges::{CallsEdge, CallType, ContainsEdge};
+use super::treesitter::{extract_doc_comment, TreeSitterParser};
+use crate::knowledge::ontology::edges::{CallType, CallsEdge, ContainsEdge};
 use crate::knowledge::ontology::nodes::{
-    EnumEntity, FunctionEntity, StructEntity, TraitEntity,
-    Visibility, FieldInfo, Parameter,
+    EnumEntity, FieldInfo, FunctionEntity, Parameter, StructEntity, TraitEntity, Visibility,
 };
 
 /// TypeScript parser using tree-sitter.
@@ -48,11 +47,14 @@ impl TypeScriptParser {
         let name = TreeSitterParser::node_text(&name_node, content).to_string();
 
         let params = self.extract_parameters(node, content);
-        let return_type = node.child_by_field_name("return_type")
-            .map(|n| TreeSitterParser::node_text(&n, content).trim_start_matches(':').trim().to_string());
+        let return_type = node.child_by_field_name("return_type").map(|n| {
+            TreeSitterParser::node_text(&n, content)
+                .trim_start_matches(':')
+                .trim()
+                .to_string()
+        });
 
-        let is_async = node.children(&mut node.walk())
-            .any(|c| c.kind() == "async");
+        let is_async = node.children(&mut node.walk()).any(|c| c.kind() == "async");
 
         Some(FunctionEntity {
             id: Some(format!("function:{}:{}", path, name)),
@@ -62,7 +64,10 @@ impl TypeScriptParser {
             start_line: TreeSitterParser::node_line(node),
             end_line: TreeSitterParser::node_end_line(node),
             signature: TreeSitterParser::node_text(node, content)
-                .lines().next().unwrap_or("").to_string(),
+                .lines()
+                .next()
+                .unwrap_or("")
+                .to_string(),
             parent: None,
             visibility: self.extract_visibility(node, content),
             is_async,
@@ -106,7 +111,8 @@ impl TypeScriptParser {
         for child in node.children(&mut cursor) {
             if child.kind() == "method_signature" {
                 if let Some(method_name) = child.child_by_field_name("name") {
-                    required_methods.push(TreeSitterParser::node_text(&method_name, content).to_string());
+                    required_methods
+                        .push(TreeSitterParser::node_text(&method_name, content).to_string());
                 }
             }
         }
@@ -168,10 +174,12 @@ impl TypeScriptParser {
             let mut cursor = params_node.walk();
             for child in params_node.children(&mut cursor) {
                 if child.kind() == "required_parameter" || child.kind() == "optional_parameter" {
-                    let name = child.child_by_field_name("pattern")
+                    let name = child
+                        .child_by_field_name("pattern")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_default();
-                    let type_name = child.child_by_field_name("type")
+                    let type_name = child
+                        .child_by_field_name("type")
                         .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                         .unwrap_or_else(|| "any".to_string());
 
@@ -194,10 +202,12 @@ impl TypeScriptParser {
 
         for child in node.children(&mut cursor) {
             if child.kind() == "public_field_definition" || child.kind() == "field_definition" {
-                let name = child.child_by_field_name("name")
+                let name = child
+                    .child_by_field_name("name")
                     .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                     .unwrap_or_default();
-                let type_name = child.child_by_field_name("type")
+                let type_name = child
+                    .child_by_field_name("type")
                     .map(|n| TreeSitterParser::node_text(&n, content).to_string())
                     .unwrap_or_else(|| "any".to_string());
 
@@ -218,7 +228,8 @@ impl TypeScriptParser {
         node.child_by_field_name("type_parameters")
             .map(|params| {
                 let mut cursor = params.walk();
-                params.children(&mut cursor)
+                params
+                    .children(&mut cursor)
                     .filter(|c| c.kind() == "type_parameter")
                     .map(|c| TreeSitterParser::node_text(&c, content).to_string())
                     .collect()
@@ -244,7 +255,13 @@ impl TypeScriptParser {
         self.extract_calls_recursive(node, content, caller_id, result);
     }
 
-    fn extract_calls_recursive(&self, node: &Node, content: &str, caller_id: &str, result: &mut ParseResult) {
+    fn extract_calls_recursive(
+        &self,
+        node: &Node,
+        content: &str,
+        caller_id: &str,
+        result: &mut ParseResult,
+    ) {
         match node.kind() {
             "call_expression" => {
                 // Get the function being called
@@ -253,7 +270,10 @@ impl TypeScriptParser {
                         "member_expression" => {
                             // Method call: obj.method()
                             if let Some(prop) = func_node.child_by_field_name("property") {
-                                (TreeSitterParser::node_text(&prop, content).to_string(), CallType::Method)
+                                (
+                                    TreeSitterParser::node_text(&prop, content).to_string(),
+                                    CallType::Method,
+                                )
                             } else {
                                 return;
                             }
@@ -261,7 +281,12 @@ impl TypeScriptParser {
                         "identifier" => {
                             // Direct call: func()
                             let name = TreeSitterParser::node_text(&func_node, content).to_string();
-                            let call_type = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                            let call_type = if name
+                                .chars()
+                                .next()
+                                .map(|c| c.is_uppercase())
+                                .unwrap_or(false)
+                            {
                                 CallType::Constructor
                             } else {
                                 CallType::Direct

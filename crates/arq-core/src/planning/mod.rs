@@ -1,9 +1,3 @@
 mod plan;
 
-pub use plan::{
-    Plan,
-    Complexity,
-    FileSpec,
-    FileModification,
-    FunctionSignature,
-};
+pub use plan::{Complexity, FileModification, FileSpec, FunctionSignature, Plan};

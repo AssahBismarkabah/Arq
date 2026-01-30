@@ -7,18 +7,18 @@
 //! - **Type System**: IMPLEMENTS, EXTENDS, USES_TYPE, RETURNS_TYPE
 //! - **API**: EXPOSES, MAPS_TO, CONSUMES, PRODUCES
 
-mod structural;
-mod behavioral;
-mod type_system;
 mod api;
+mod behavioral;
+mod structural;
+mod type_system;
 
-pub use structural::*;
-pub use behavioral::*;
-pub use type_system::*;
 pub use api::*;
+pub use behavioral::*;
+pub use structural::*;
+pub use type_system::*;
 
-use serde::{Deserialize, Serialize};
 use super::EdgeCategory;
+use serde::{Deserialize, Serialize};
 
 /// A unified edge type that can represent any relationship in the knowledge graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,17 +81,30 @@ impl GraphEdge {
     /// Get the category of this edge.
     pub fn category(&self) -> EdgeCategory {
         match self {
-            Self::Contains(_) | Self::BelongsTo(_) | Self::Imports(_) |
-            Self::Exports(_) | Self::DependsOn(_) => EdgeCategory::Structural,
+            Self::Contains(_)
+            | Self::BelongsTo(_)
+            | Self::Imports(_)
+            | Self::Exports(_)
+            | Self::DependsOn(_) => EdgeCategory::Structural,
 
-            Self::Calls(_) | Self::Returns(_) | Self::Throws(_) |
-            Self::Awaits(_) | Self::Reads(_) | Self::Writes(_) => EdgeCategory::Behavioral,
+            Self::Calls(_)
+            | Self::Returns(_)
+            | Self::Throws(_)
+            | Self::Awaits(_)
+            | Self::Reads(_)
+            | Self::Writes(_) => EdgeCategory::Behavioral,
 
-            Self::Implements(_) | Self::Extends(_) | Self::UsesType(_) |
-            Self::ReturnsType(_) | Self::HasField(_) => EdgeCategory::TypeSystem,
+            Self::Implements(_)
+            | Self::Extends(_)
+            | Self::UsesType(_)
+            | Self::ReturnsType(_)
+            | Self::HasField(_) => EdgeCategory::TypeSystem,
 
-            Self::Exposes(_) | Self::MapsTo(_) | Self::Consumes(_) |
-            Self::Produces(_) | Self::Tests(_) => EdgeCategory::Api,
+            Self::Exposes(_)
+            | Self::MapsTo(_)
+            | Self::Consumes(_)
+            | Self::Produces(_)
+            | Self::Tests(_) => EdgeCategory::Api,
         }
     }
 
