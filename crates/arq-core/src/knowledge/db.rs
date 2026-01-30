@@ -825,6 +825,129 @@ impl KnowledgeDb {
             implements: count_table(&self.db, "implements").await?,
         })
     }
+
+    /// List all struct entities.
+    pub async fn list_structs(&self) -> Result<Vec<super::ontology::nodes::StructEntity>, KnowledgeError> {
+        // Select all fields except id to avoid SurrealDB Thing deserialization issues
+        let results: Vec<super::ontology::nodes::StructEntity> = self
+            .db
+            .query("SELECT name, qualified_name, file_path, start_line, end_line, visibility, generics, fields, derives, attributes, doc_comment FROM struct_node")
+            .await?
+            .take(0)?;
+        Ok(results)
+    }
+
+    /// List all trait/interface entities.
+    pub async fn list_traits(&self) -> Result<Vec<super::ontology::nodes::TraitEntity>, KnowledgeError> {
+        let results: Vec<super::ontology::nodes::TraitEntity> = self
+            .db
+            .query("SELECT name, qualified_name, file_path, start_line, end_line, visibility, generics, super_traits, required_methods, provided_methods, associated_types, doc_comment FROM trait_node")
+            .await?
+            .take(0)?;
+        Ok(results)
+    }
+
+    /// List all enum entities.
+    pub async fn list_enums(&self) -> Result<Vec<super::ontology::nodes::EnumEntity>, KnowledgeError> {
+        let results: Vec<super::ontology::nodes::EnumEntity> = self
+            .db
+            .query("SELECT name, qualified_name, file_path, start_line, end_line, visibility, generics, variants, derives, doc_comment FROM enum_node")
+            .await?
+            .take(0)?;
+        Ok(results)
+    }
+
+    /// List all impl entities.
+    pub async fn list_impls(&self) -> Result<Vec<super::ontology::nodes::ImplEntity>, KnowledgeError> {
+        let results: Vec<super::ontology::nodes::ImplEntity> = self
+            .db
+            .query("SELECT target_type, trait_name, file_path, start_line, end_line, generics, where_clause, methods FROM impl_node")
+            .await?
+            .take(0)?;
+        Ok(results)
+    }
+
+    /// List all call edges.
+    pub async fn list_calls(&self) -> Result<Vec<CallInfo>, KnowledgeError> {
+        let results: Vec<CallInfo> = self
+            .db
+            .query("SELECT * FROM calls")
+            .await?
+            .take(0)?;
+        Ok(results)
+    }
+
+    /// List all implements edges (impl -> trait).
+    pub async fn list_implements(&self) -> Result<Vec<ImplementsInfo>, KnowledgeError> {
+        let results: Vec<ImplementsInfo> = self
+            .db
+            .query("SELECT * FROM implements")
+            .await?
+            .take(0)?;
+        Ok(results)
+    }
+
+    /// List all indexed file paths.
+    pub async fn list_indexed_files(&self) -> Result<Vec<String>, KnowledgeError> {
+        #[derive(serde::Deserialize)]
+        struct FilePathResult {
+            path: String,
+        }
+
+        let results: Vec<FilePathResult> = self
+            .db
+            .query("SELECT path FROM file")
+            .await?
+            .take(0)?;
+        Ok(results.into_iter().map(|r| r.path).collect())
+    }
+
+    /// List all function entities (extended).
+    pub async fn list_function_entities(&self) -> Result<Vec<super::ontology::nodes::FunctionEntity>, KnowledgeError> {
+        // Select all fields except id to avoid SurrealDB Thing deserialization issues
+        let results: Vec<super::ontology::nodes::FunctionEntity> = self
+            .db
+            .query("SELECT name, qualified_name, file_path, start_line, end_line, signature, parent, visibility, is_async, is_unsafe, generics, parameters, return_type, doc_comment, complexity FROM fn_node")
+            .await?
+            .take(0)?;
+        Ok(results)
+    }
+}
+
+/// Information about a call edge for API responses.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CallInfo {
+    #[serde(default)]
+    pub caller_id: String,
+    #[serde(default)]
+    pub callee_id: String,
+    #[serde(default)]
+    pub caller_name: String,
+    #[serde(default)]
+    pub callee_name: String,
+    #[serde(default)]
+    pub call_type: super::ontology::edges::CallType,
+}
+
+impl Default for CallInfo {
+    fn default() -> Self {
+        Self {
+            caller_id: String::new(),
+            callee_id: String::new(),
+            caller_name: String::new(),
+            callee_name: String::new(),
+            call_type: super::ontology::edges::CallType::Direct,
+        }
+    }
+}
+
+/// Information about an implements edge (impl -> trait).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct ImplementsInfo {
+    #[serde(default)]
+    pub impl_id: String,
+    #[serde(default)]
+    pub trait_id: String,
 }
 
 /// Extended statistics for the rich ontology.

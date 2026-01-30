@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arq Knowledge Graph - {{PROJECT_NAME}}</title>
+    <style>{{STYLES}}</style>
+</head>
+<body>
+    <!-- Graph Canvas -->
+    <div id="graph-container"></div>
+
+    <!-- Loading Indicator -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Loading knowledge graph...</div>
+    </div>
+
+    <!-- Controls Panel -->
+    <div id="controls">
+        <h1>Arq Knowledge Graph</h1>
+        <input type="text" id="search" placeholder="Search nodes...">
+
+        <button id="layout-btn" class="btn active">Stop Layout</button>
+        <button id="reset-btn" class="btn">Reset View</button>
+
+        <div class="filter-group" id="node-type-filters">
+            <h3>Filter by Type</h3>
+            <!-- Filters are dynamically populated based on graph data -->
+        </div>
+    </div>
+
+    <!-- Node Details Panel -->
+    <div id="node-details">
+        <button class="close-btn" onclick="hideNodeDetails()">&times;</button>
+        <h2 id="detail-name">-</h2>
+        <div class="detail-row">
+            <span class="label">Type</span>
+            <span class="value" id="detail-type">-</span>
+        </div>
+        <div class="detail-row">
+            <span class="label">File</span>
+            <span class="value" id="detail-file">-</span>
+        </div>
+        <div class="detail-row">
+            <span class="label">Lines</span>
+            <span class="value" id="detail-lines">-</span>
+        </div>
+        <div class="detail-row">
+            <span class="label">Outgoing</span>
+            <span class="value" id="detail-outgoing">-</span>
+        </div>
+        <div class="detail-row">
+            <span class="label">Incoming</span>
+            <span class="value" id="detail-incoming">-</span>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status-bar">
+        <span class="stat">Nodes: <strong id="node-count">0</strong></span>
+        <span class="stat">Edges: <strong id="edge-count">0</strong></span>
+    </div>
+
+    <!-- External Libraries (CDN) - Using UMD bundles for global access -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.25.4/graphology.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
+
+    <!-- Application Script (ES Module for ForceAtlas2) -->
+    <script type="module">
+        // Import ForceAtlas2 from esm.sh (converts npm to ES module)
+        import forceAtlas2 from 'https://esm.sh/graphology-layout-forceatlas2@0.10.1';
+        import FA2Layout from 'https://esm.sh/graphology-layout-forceatlas2@0.10.1/worker';
+
+        // Expose to global scope for our app script
+        window.forceAtlas2 = forceAtlas2;
+        window.FA2Layout = FA2Layout;
+
+        // Now run the main app
+        {{SCRIPT}}
+    </script>
+</body>
+</html>

@@ -5,6 +5,7 @@ use arq_core::{
 };
 use std::path::Path;
 
+mod serve;
 mod tui;
 
 #[derive(Parser)]
@@ -66,6 +67,15 @@ enum Commands {
     /// Launch interactive TUI chat interface
     #[command(alias = "ui")]
     Tui,
+    /// Start visualization server for knowledge graph
+    Serve {
+        /// Port to run the server on
+        #[arg(short, long, default_value = "3333")]
+        port: u16,
+        /// Don't automatically open browser
+        #[arg(long)]
+        no_open: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -472,7 +482,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 GraphAction::Functions { limit } => {
                     println!("Indexed functions (showing up to {}):\n", limit);
 
-                    let functions = kg.list_functions(limit).await?;
+                    let all_functions = kg.list_functions(limit).await?;
+                    let functions: Vec<_> = all_functions.into_iter().take(limit).collect();
 
                     if functions.is_empty() {
                         println!("  No functions indexed yet.");
@@ -496,6 +507,24 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Tui => {
             tui::run(config, manager).await?;
+        }
+        Commands::Serve { port, no_open } => {
+            let db_path = config.knowledge.db_full_path(&config.storage);
+
+            if !db_path.exists() {
+                println!("Knowledge graph not initialized.");
+                println!("Run 'arq init' to index your codebase first.");
+                return Ok(());
+            }
+
+            let serve_config = serve::ServeConfig {
+                port,
+                open_browser: !no_open,
+                project_path: std::env::current_dir()?,
+                db_path: db_path.clone(),
+            };
+
+            serve::start_server(serve_config).await?;
         }
     }
 

@@ -39,7 +39,7 @@ pub mod models;
 pub mod ontology;
 pub mod parser;
 
-pub use db::{ExtendedIndexStats, KnowledgeDb};
+pub use db::{CallInfo, ExtendedIndexStats, ImplementsInfo, KnowledgeDb};
 pub use embedder::Embedder;
 pub use error::KnowledgeError;
 pub use models::{CodeChunk, FileNode, FunctionNode, IndexStats, SearchResult, StructNode};
@@ -118,6 +118,46 @@ impl KnowledgeGraph {
     /// Get extended statistics including rich ontology entity counts.
     pub async fn get_extended_stats(&self) -> Result<ExtendedIndexStats, KnowledgeError> {
         self.db.get_extended_stats().await
+    }
+
+    /// List all function entities (rich ontology).
+    pub async fn list_all_functions(&self) -> Result<Vec<ontology::nodes::FunctionEntity>, KnowledgeError> {
+        self.db.list_function_entities().await
+    }
+
+    /// List all struct entities.
+    pub async fn list_structs(&self) -> Result<Vec<ontology::nodes::StructEntity>, KnowledgeError> {
+        self.db.list_structs().await
+    }
+
+    /// List all trait/interface entities.
+    pub async fn list_traits(&self) -> Result<Vec<ontology::nodes::TraitEntity>, KnowledgeError> {
+        self.db.list_traits().await
+    }
+
+    /// List all enum entities.
+    pub async fn list_enums(&self) -> Result<Vec<ontology::nodes::EnumEntity>, KnowledgeError> {
+        self.db.list_enums().await
+    }
+
+    /// List all impl entities.
+    pub async fn list_impls(&self) -> Result<Vec<ontology::nodes::ImplEntity>, KnowledgeError> {
+        self.db.list_impls().await
+    }
+
+    /// List all call edges.
+    pub async fn list_calls(&self) -> Result<Vec<CallInfo>, KnowledgeError> {
+        self.db.list_calls().await
+    }
+
+    /// List all implements edges (impl -> trait).
+    pub async fn list_implements(&self) -> Result<Vec<ImplementsInfo>, KnowledgeError> {
+        self.db.list_implements().await
+    }
+
+    /// List all indexed file paths.
+    pub async fn list_indexed_files(&self) -> Result<Vec<String>, KnowledgeError> {
+        self.db.list_indexed_files().await
     }
 }
 

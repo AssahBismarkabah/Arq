@@ -89,53 +89,69 @@ pub struct ComplexityMetrics {
 // =============================================================================
 
 /// A struct or class in the codebase.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StructEntity {
     /// Unique identifier
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub id: Option<String>,
 
     /// Struct name
+    #[serde(default)]
     pub name: String,
 
     /// Full qualified name
+    #[serde(default)]
     pub qualified_name: String,
 
     /// File containing this struct
+    #[serde(default)]
     pub file_path: String,
 
     /// Start line number
+    #[serde(default)]
     pub start_line: u32,
 
     /// End line number
+    #[serde(default)]
     pub end_line: u32,
 
     /// Visibility
+    #[serde(default)]
     pub visibility: Visibility,
 
     /// Generic parameters
+    #[serde(default)]
     pub generics: Vec<String>,
 
     /// Fields
+    #[serde(default)]
     pub fields: Vec<FieldInfo>,
 
     /// Derive macros applied
+    #[serde(default)]
     pub derives: Vec<String>,
 
     /// Attributes (e.g., #[serde(rename_all = "camelCase")])
+    #[serde(default)]
     pub attributes: Vec<String>,
 
     /// Documentation comment
+    #[serde(default)]
     pub doc_comment: Option<String>,
 }
 
 /// Information about a struct field.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FieldInfo {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub type_name: String,
+    #[serde(default)]
     pub visibility: Visibility,
+    #[serde(default)]
     pub attributes: Vec<String>,
+    #[serde(default)]
     pub doc_comment: Option<String>,
 }
 
