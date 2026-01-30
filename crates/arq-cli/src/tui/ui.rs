@@ -65,9 +65,12 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
             "Researching...  [q] Quit"
         }
         (InputMode::Normal, ResearchState::Idle) => {
-            "[i] Edit  [Tab] Switch  [j/k] Scroll  [q] Quit"
+            "[i] Edit  [m] Model  [Tab] Switch  [j/k] Scroll  [q] Quit"
         }
     };
+
+    // Model indicator
+    let model_info = format!("[{}]", app.current_model());
 
     let task_info = app.current_task.as_ref().map_or_else(
         || "No active task".to_string(),
@@ -79,7 +82,7 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
         .map(|s| s.as_str())
         .unwrap_or(&task_info);
 
-    let status = format!("{}  |  {}", mode_str, right_side);
+    let status = format!("{}  |  {}  |  {}", mode_str, model_info, right_side);
 
     let status_bar = Paragraph::new(status)
         .style(Style::default().fg(Color::DarkGray));

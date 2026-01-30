@@ -14,14 +14,14 @@ pub const RESEARCH_SYSTEM_PROMPT: &str = DEFAULT_RESEARCH_SYSTEM_PROMPT;
 /// Builds the user prompt for research.
 pub fn build_research_prompt(task_prompt: &str, context: &str) -> String {
     format!(
-        r#"## Task
+        r#"## Developer's Question
 
 {task_prompt}
 
-## Codebase
+## Relevant Code from Codebase
 
 {context}
 
-Analyze this codebase for the given task. Identify relevant files, dependencies, and suggest an approach."#
+IMPORTANT: Your response must DIRECTLY answer the developer's question above. Use the code provided as evidence. Do NOT give a generic codebase overview - focus specifically on answering their question with concrete details from the code."#
     )
 }

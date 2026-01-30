@@ -195,6 +195,10 @@ pub struct LLMConfig {
 
     /// API version (for Anthropic).
     pub api_version: Option<String>,
+
+    /// Available models to choose from (for TUI model selection).
+    #[serde(default)]
+    pub available_models: Vec<String>,
 }
 
 impl Default for LLMConfig {
@@ -206,6 +210,7 @@ impl Default for LLMConfig {
             api_key: None, // Load from env
             max_tokens: DEFAULT_MAX_TOKENS,
             api_version: Some(DEFAULT_ANTHROPIC_API_VERSION.to_string()),
+            available_models: Vec::new(),
         }
     }
 }

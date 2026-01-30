@@ -202,12 +202,25 @@ pub struct App {
     pub status_message: Option<String>,
     /// Research validation state
     pub research_state: ResearchState,
+    /// Index of currently selected model in available_models
+    pub selected_model_index: usize,
 }
 
 impl App {
     /// Create a new app instance.
     pub fn new(config: Config, manager: TaskManager<FileStorage>) -> Self {
         let current_task = manager.get_current_task().ok().flatten();
+
+        // Find the index of the current model in available_models
+        let selected_model_index = if !config.llm.available_models.is_empty() {
+            let current_model = config.llm.model_or_default();
+            config.llm.available_models
+                .iter()
+                .position(|m| m == &current_model)
+                .unwrap_or(0)
+        } else {
+            0
+        };
 
         let mut app = Self {
             selected_tab: SelectedTab::Researcher,
@@ -224,6 +237,7 @@ impl App {
             current_task: current_task.clone(),
             status_message: None,
             research_state: ResearchState::Idle,
+            selected_model_index,
         };
 
         // Add welcome message
@@ -333,9 +347,12 @@ impl App {
                 self.set_progress_status(1, ProgressStatus::InProgress);
             }
             ResearchProgress::KnowledgeGraphResults { count } => {
+                self.set_progress_status(1, ProgressStatus::Complete);
                 self.status_message = Some(format!("Found {} relevant code segments", count));
             }
             ResearchProgress::CallingLLM => {
+                // Mark context gathering complete (in case we skipped knowledge graph)
+                self.set_progress_status(0, ProgressStatus::Complete);
                 self.set_progress_status(1, ProgressStatus::Complete);
                 self.set_progress_status(2, ProgressStatus::InProgress);
             }
@@ -474,6 +491,10 @@ impl App {
                 {
                     self.approve_research(task_id, pending_doc);
                 }
+            }
+            KeyCode::Char('m') => {
+                // Cycle through available models
+                self.cycle_model();
             }
             _ => {}
         }
@@ -679,6 +700,33 @@ impl App {
     /// Scroll chat down.
     fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
+    }
+
+    /// Cycle through available models.
+    fn cycle_model(&mut self) {
+        let models = &self.config.llm.available_models;
+        if models.is_empty() {
+            self.status_message = Some("No models configured in available_models".to_string());
+            return;
+        }
+
+        // Cycle to next model
+        self.selected_model_index = (self.selected_model_index + 1) % models.len();
+        let new_model = models[self.selected_model_index].clone();
+
+        // Update config
+        self.config.llm.model = Some(new_model.clone());
+
+        self.status_message = Some(format!("Model: {} ({}/{})",
+            new_model,
+            self.selected_model_index + 1,
+            models.len()
+        ));
+    }
+
+    /// Get the current model name for display.
+    pub fn current_model(&self) -> String {
+        self.config.llm.model_or_default()
     }
 }
 

@@ -108,6 +108,7 @@ mod provider {
             api_key: None,
             max_tokens: 4096,
             api_version: None,
+            available_models: Vec::new(),
         };
 
         let provider = Provider::from_config(&config);
