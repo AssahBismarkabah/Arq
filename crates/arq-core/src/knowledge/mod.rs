@@ -36,11 +36,14 @@ mod embedder;
 mod error;
 pub mod indexer;
 pub mod models;
+pub mod ontology;
+pub mod parser;
 
-pub use db::KnowledgeDb;
+pub use db::{ExtendedIndexStats, KnowledgeDb};
 pub use embedder::Embedder;
 pub use error::KnowledgeError;
 pub use models::{CodeChunk, FileNode, FunctionNode, IndexStats, SearchResult, StructNode};
+pub use parser::{ParseResult, Parser, ParserRegistry, RustParser};
 
 use async_trait::async_trait;
 use std::path::Path;
@@ -110,6 +113,11 @@ impl KnowledgeGraph {
     /// Open an existing knowledge graph.
     pub async fn open(db_path: &Path) -> Result<Self, KnowledgeError> {
         Self::new(db_path).await
+    }
+
+    /// Get extended statistics including rich ontology entity counts.
+    pub async fn get_extended_stats(&self) -> Result<ExtendedIndexStats, KnowledgeError> {
+        self.db.get_extended_stats().await
     }
 }
 

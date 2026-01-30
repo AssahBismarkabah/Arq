@@ -106,6 +106,7 @@ impl OpenAIClient {
             all_messages.push(ChatMessage {
                 role: "system".to_string(),
                 content: sys.to_string(),
+                ..Default::default()
             });
         }
 
@@ -145,10 +146,17 @@ impl OpenAIClient {
             });
         }
 
-        let chat_response: ChatResponse = response
-            .json()
-            .await
-            .map_err(|e| LLMError::ParseError(e.to_string()))?;
+        // Get response as text first for better error messages
+        let response_text = response.text().await
+            .map_err(|e| LLMError::Network(format!("Failed to read response body: {}", e)))?;
+
+        // Try to parse as JSON
+        let chat_response: ChatResponse = serde_json::from_str(&response_text)
+            .map_err(|e| LLMError::ParseError(format!(
+                "Failed to parse response: {}. Response: {}",
+                e,
+                &response_text[..response_text.len().min(500)]
+            )))?;
 
         // Extract content from first choice
         let content = chat_response
@@ -175,6 +183,7 @@ impl OpenAIClient {
             all_messages.push(ChatMessage {
                 role: "system".to_string(),
                 content: sys.to_string(),
+                ..Default::default()
             });
         }
 
@@ -247,6 +256,7 @@ impl LLM for OpenAIClient {
         let messages = vec![ChatMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
+            ..Default::default()
         }];
 
         self.send_request(messages, None).await
@@ -260,6 +270,7 @@ impl LLM for OpenAIClient {
         let messages = vec![ChatMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
+            ..Default::default()
         }];
 
         self.send_request(messages, Some(system)).await
@@ -274,6 +285,7 @@ impl LLM for OpenAIClient {
         let messages = vec![ChatMessage {
             role: "user".to_string(),
             content: prompt.to_string(),
+            ..Default::default()
         }];
 
         self.send_streaming_request(messages, Some(system), tx).await
@@ -294,20 +306,32 @@ struct ChatRequest {
     stream: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 struct ChatMessage {
+    #[serde(default)]
     role: String,
+    #[serde(default)]
     content: String,
+    // Some providers include extra fields like thinking_blocks
+    #[serde(flatten, default)]
+    _extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
+    #[serde(default)]
     choices: Vec<Choice>,
+    // Allow extra fields like usage, model, etc.
+    #[serde(flatten)]
+    _extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Choice {
     message: ChatMessage,
+    // Allow extra fields like index, finish_reason
+    #[serde(flatten)]
+    _extra: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Parse an OpenAI SSE line and extract text from delta content.

@@ -406,7 +406,7 @@ struct DependencyResponse {
     is_external: bool,
 }
 
-/// Extracts JSON from a response that might be wrapped in markdown code blocks.
+/// Extracts JSON from a response that might be wrapped in markdown code blocks or have extra text.
 fn extract_json(response: &str) -> &str {
     let trimmed = response.trim();
 
@@ -418,6 +418,16 @@ fn extract_json(response: &str) -> &str {
             // Find the closing ```
             if let Some(end) = rest.rfind("```") {
                 return rest[..end].trim();
+            }
+        }
+    }
+
+    // Look for JSON object by finding first { and last }
+    // This handles cases where LLM adds text before/after JSON
+    if let Some(start) = trimmed.find('{') {
+        if let Some(end) = trimmed.rfind('}') {
+            if end > start {
+                return &trimmed[start..=end];
             }
         }
     }

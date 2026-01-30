@@ -386,20 +386,23 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let kg = KnowledgeGraph::open(&db_path).await?;
-            let stats: IndexStats = kg.get_stats().await?;
-
-            let calls_count = kg.count_calls().await.unwrap_or(0);
+            let stats = kg.get_extended_stats().await?;
 
             println!("Knowledge Graph Status\n");
             println!("  Files indexed: {}", stats.files);
-            println!("  Structs: {}", stats.structs);
-            println!("  Functions: {}", stats.functions);
-            println!("  Call relations: {}", calls_count);
             println!("  Code chunks: {}", stats.chunks);
-            println!("  Total size: {} KB", stats.total_size / 1024);
-            if let Some(ref updated) = stats.last_updated {
-                println!("  Last updated: {}", updated.format("%Y-%m-%d %H:%M"));
-            }
+            println!();
+            println!("  Rich Ontology:");
+            println!("    Functions: {}", stats.functions);
+            println!("    Structs: {}", stats.structs);
+            println!("    Traits: {}", stats.traits);
+            println!("    Impls: {}", stats.impls);
+            println!("    Enums: {}", stats.enums);
+            println!("    Constants: {}", stats.constants);
+            println!();
+            println!("  Relations:");
+            println!("    Calls: {}", stats.calls);
+            println!("    Implements: {}", stats.implements);
             println!("\nDatabase path: {}", db_path.display());
         }
         Commands::Graph { action } => {
@@ -420,11 +423,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
                     match func {
                         Some(f) => {
-                            let entity_id = f.id
-                                .map(|id| id.to_string())
-                                .unwrap_or_else(|| format!("fn_node:{}", name));
-
-                            let deps = kg.get_dependencies(&entity_id).await?;
+                            // Use function name directly for the call lookup
+                            let deps = kg.get_dependencies(&name).await?;
 
                             if deps.is_empty() {
                                 println!("'{}' has no outgoing calls recorded.", name);
@@ -450,11 +450,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
                     match func {
                         Some(f) => {
-                            let entity_id = f.id
-                                .map(|id| id.to_string())
-                                .unwrap_or_else(|| format!("fn_node:{}", name));
-
-                            let callers = kg.get_impact(&entity_id).await?;
+                            // Use function name directly for the call lookup
+                            let callers = kg.get_impact(&name).await?;
 
                             if callers.is_empty() {
                                 println!("'{}' has no incoming calls recorded.", name);

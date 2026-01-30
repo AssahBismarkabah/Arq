@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 
 use arq_core::{
     Config, ContextBuilder, FileStorage, ResearchDoc, ResearchProgress, ResearchRunner,
-    Task, TaskManager,
+    Task, TaskManager, KnowledgeGraph, KnowledgeStore,
 };
 
 use super::event::{Event, EventHandler, ResearchResult};
@@ -172,6 +172,18 @@ impl ProgressItem {
     }
 }
 
+/// Status messages shown while researching.
+const THINKING_MESSAGES: &[&str] = &[
+    "Thinking...",
+    "Analyzing code...",
+    "Reading files...",
+    "Processing context...",
+    "Reasoning...",
+    "Understanding patterns...",
+    "Connecting dots...",
+    "Almost there...",
+];
+
 /// Main application state.
 pub struct App {
     /// Currently selected tab
@@ -204,6 +216,11 @@ pub struct App {
     pub research_state: ResearchState,
     /// Index of currently selected model in available_models
     pub selected_model_index: usize,
+    /// Tick counter for cycling messages
+    pub tick_count: usize,
+    /// Knowledge graph for semantic search (initialized lazily, for future TUI integration)
+    #[allow(dead_code)]
+    pub knowledge_graph: Option<std::sync::Arc<KnowledgeGraph>>,
 }
 
 impl App {
@@ -238,6 +255,8 @@ impl App {
             status_message: None,
             research_state: ResearchState::Idle,
             selected_model_index,
+            tick_count: 0,
+            knowledge_graph: None, // Initialized lazily during first research
         };
 
         // Add welcome message
@@ -300,7 +319,13 @@ impl App {
                 match event {
                     Event::Key(key) => self.handle_key_event(key, events.sender()),
                     Event::Tick => {
-                        // Update any animations or timers
+                        // Update cycling status messages during research
+                        self.tick_count = self.tick_count.wrapping_add(1);
+                        if matches!(self.research_state, ResearchState::Researching | ResearchState::Refining) {
+                            // Cycle message every ~8 ticks (about 2 seconds at 250ms tick rate)
+                            let msg_index = (self.tick_count / 8) % THINKING_MESSAGES.len();
+                            self.status_message = Some(THINKING_MESSAGES[msg_index].to_string());
+                        }
                     }
                     Event::StreamChunk(text) => {
                         self.stream_buffer.push_str(&text);
@@ -589,6 +614,9 @@ impl App {
         // Get config values we need
         let config = self.config.clone();
 
+        // Get the knowledge graph db path for semantic search
+        let kg_db_path = config.knowledge.db_full_path(&config.storage);
+
         // Add message to show research is starting
         self.chat_messages.push(ChatMessage::system(format!(
             "Researching: {} ...", task.prompt
@@ -596,7 +624,7 @@ impl App {
 
         // Spawn the research task
         tokio::spawn(async move {
-            match run_research_task(task, config, event_tx.clone()).await {
+            match run_research_task(task, config, kg_db_path, event_tx.clone()).await {
                 Ok(doc) => {
                     let _ = event_tx.send(Event::ResearchComplete(ResearchResult {
                         task_id,
@@ -642,10 +670,11 @@ impl App {
 
         let config = self.config.clone();
         let task_id_clone = task_id.clone();
+        let kg_db_path = config.knowledge.db_full_path(&config.storage);
 
         // Spawn the refinement task (reuses run_research_task)
         tokio::spawn(async move {
-            match run_research_task(task, config, event_tx.clone()).await {
+            match run_research_task(task, config, kg_db_path, event_tx.clone()).await {
                 Ok(doc) => {
                     // Return with original task_id so we save to the right task
                     let _ = event_tx.send(Event::ResearchComplete(ResearchResult {
@@ -735,15 +764,44 @@ impl App {
 async fn run_research_task(
     task: Task,
     config: Config,
+    kg_db_path: std::path::PathBuf,
     event_tx: mpsc::UnboundedSender<Event>,
 ) -> Result<arq_core::ResearchDoc, String> {
     use arq_core::{ClaudeClient, OpenAIClient, StreamChunk};
     use std::env;
+    use std::sync::Arc;
 
     // Create context builder with config
     let cwd = env::current_dir()
         .map_err(|e| format!("Failed to get current directory: {}", e))?;
-    let context_builder = ContextBuilder::with_config(cwd, config.context.clone());
+    let context_builder = ContextBuilder::with_config(cwd.clone(), config.context.clone());
+
+    // Try to initialize knowledge graph for semantic search
+    let knowledge_store: Option<Arc<dyn KnowledgeStore>> = match KnowledgeGraph::open(&kg_db_path).await {
+        Ok(kg) => {
+            // Check if initialized, if not initialize and index
+            let kg = Arc::new(kg);
+            if !kg.is_initialized().await.unwrap_or(false) {
+                if let Err(e) = kg.initialize().await {
+                    eprintln!("Failed to initialize knowledge graph: {}", e);
+                    None
+                } else {
+                    // Index the codebase on first run
+                    let _ = event_tx.send(Event::ResearchProgress(ResearchProgress::SearchingKnowledgeGraph));
+                    if let Err(e) = kg.index_directory(&cwd).await {
+                        eprintln!("Failed to index codebase: {}", e);
+                    }
+                    Some(kg as Arc<dyn KnowledgeStore>)
+                }
+            } else {
+                Some(kg as Arc<dyn KnowledgeStore>)
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to open knowledge graph: {}", e);
+            None
+        }
+    };
 
     // Create channels for progress and streaming
     let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<ResearchProgress>();
@@ -774,12 +832,23 @@ async fn run_research_task(
     let provider = config.llm.provider.as_str();
     let model = config.llm.model_or_default();
 
+    // Helper macro to create runner with or without knowledge store
+    macro_rules! create_runner {
+        ($client:expr) => {
+            if let Some(ref kg) = knowledge_store {
+                ResearchRunner::with_knowledge_store($client, context_builder.clone(), Arc::clone(kg))
+            } else {
+                ResearchRunner::new($client, context_builder.clone())
+            }
+        };
+    }
+
     let doc = match provider {
         "anthropic" | "claude" => {
             let api_key = config.llm.api_key_or_env()
                 .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
             let client = ClaudeClient::new(api_key).with_model(&model);
-            let runner = ResearchRunner::new(client, context_builder);
+            let runner = create_runner!(client);
             runner
                 .run_streaming(&task, progress_tx, stream_tx)
                 .await
@@ -788,7 +857,7 @@ async fn run_research_task(
         "ollama" => {
             let base_url = config.llm.base_url_or_default();
             let client = OpenAIClient::new(&base_url, "", &model);
-            let runner = ResearchRunner::new(client, context_builder);
+            let runner = create_runner!(client);
             runner
                 .run_streaming(&task, progress_tx, stream_tx)
                 .await
@@ -799,7 +868,7 @@ async fn run_research_task(
             let base_url = config.llm.base_url_or_default();
             let api_key = config.llm.api_key_or_env().unwrap_or_default();
             let client = OpenAIClient::new(&base_url, &api_key, &model);
-            let runner = ResearchRunner::new(client, context_builder);
+            let runner = create_runner!(client);
             // Use non-streaming for better compatibility with various providers
             let doc = runner
                 .run_with_progress(&task, progress_tx)

@@ -6,6 +6,7 @@ use ignore::WalkBuilder;
 use crate::config::ContextConfig;
 
 /// Builds context from a codebase for LLM analysis.
+#[derive(Clone)]
 pub struct ContextBuilder {
     root_path: PathBuf,
     config: ContextConfig,

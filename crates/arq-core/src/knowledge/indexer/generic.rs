@@ -1,4 +1,7 @@
-//! Generic code indexer using regex-based extraction.
+//! Generic code indexer with rich ontology support.
+//!
+//! Uses the parser registry for language-specific AST parsing when available,
+//! falling back to regex-based extraction for unsupported languages.
 
 use async_trait::async_trait;
 use ignore::WalkBuilder;
@@ -14,12 +17,19 @@ use crate::knowledge::db::KnowledgeDb;
 use crate::knowledge::embedder::Embedder;
 use crate::knowledge::error::KnowledgeError;
 use crate::knowledge::models::{CodeChunk, FileNode, IndexStats};
+use crate::knowledge::parser::{ParseResult, ParsedEdge, ParsedNode, ParserRegistry};
 
 /// Generic indexer that works with any language.
+///
+/// Uses AST-based parsing for supported languages (Rust) and falls back
+/// to regex-based extraction for others.
 pub struct GenericIndexer {
     db: Arc<KnowledgeDb>,
     embedder: Arc<dyn Embedder>,
+    parser_registry: ParserRegistry,
     extensions: Vec<String>,
+    /// Whether to use rich ontology parsing (vs legacy regex).
+    use_rich_parsing: bool,
 }
 
 impl GenericIndexer {
@@ -28,7 +38,9 @@ impl GenericIndexer {
         Self {
             db,
             embedder,
+            parser_registry: ParserRegistry::new(),
             extensions: DEFAULT_EXTENSIONS.iter().map(|s| s.to_string()).collect(),
+            use_rich_parsing: true,
         }
     }
 
@@ -38,7 +50,24 @@ impl GenericIndexer {
         embedder: Arc<dyn Embedder>,
         extensions: Vec<String>,
     ) -> Self {
-        Self { db, embedder, extensions }
+        Self {
+            db,
+            embedder,
+            parser_registry: ParserRegistry::new(),
+            extensions,
+            use_rich_parsing: true,
+        }
+    }
+
+    /// Create indexer with legacy regex-only parsing.
+    pub fn legacy(db: Arc<KnowledgeDb>, embedder: Arc<dyn Embedder>) -> Self {
+        Self {
+            db,
+            embedder,
+            parser_registry: ParserRegistry::new(),
+            extensions: DEFAULT_EXTENSIONS.iter().map(|s| s.to_string()).collect(),
+            use_rich_parsing: false,
+        }
     }
 
     /// Check if file extension is in the allowed list.
@@ -110,7 +139,74 @@ impl GenericIndexer {
     }
 
     /// Index structs and functions, creating graph relations.
+    ///
+    /// Uses rich AST-based parsing when available, falling back to regex.
     async fn index_code_entities(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
+        // Try rich parsing first if enabled
+        if self.use_rich_parsing {
+            if let Some(parser) = self.parser_registry.parser_for_path(path) {
+                match parser.parse_file(path, content) {
+                    Ok(result) => {
+                        return self.index_rich_entities(result).await;
+                    }
+                    Err(e) => {
+                        // Log warning and fall back to regex
+                        eprintln!("Warning: Rich parsing failed for {}: {}, falling back to regex", path, e);
+                    }
+                }
+            }
+        }
+
+        // Fall back to regex-based extraction
+        self.index_code_entities_legacy(path, content).await
+    }
+
+    /// Index using rich ontology entities from AST parsing.
+    async fn index_rich_entities(&self, result: ParseResult) -> Result<(), KnowledgeError> {
+        // Insert all nodes
+        for node in &result.nodes {
+            match node {
+                ParsedNode::Function(f) => {
+                    let _ = self.db.insert_function_entity(f).await;
+                }
+                ParsedNode::Struct(s) => {
+                    let _ = self.db.insert_struct_entity(s).await;
+                }
+                ParsedNode::Trait(t) => {
+                    let _ = self.db.insert_trait_entity(t).await;
+                }
+                ParsedNode::Impl(i) => {
+                    let _ = self.db.insert_impl_entity(i).await;
+                }
+                ParsedNode::Enum(e) => {
+                    let _ = self.db.insert_enum_entity(e).await;
+                }
+                ParsedNode::Constant(c) => {
+                    let _ = self.db.insert_const_entity(c).await;
+                }
+            }
+        }
+
+        // Insert all edges
+        for edge in &result.edges {
+            let (from, relation, to) = match edge {
+                ParsedEdge::Contains(e) => (&e.from, "contains", &e.to),
+                ParsedEdge::Calls(e) => (&e.from, "calls", &e.to),
+                ParsedEdge::Implements(e) => (&e.from, "implements", &e.to),
+                ParsedEdge::Extends(e) => (&e.from, "extends", &e.to),
+                ParsedEdge::UsesType(e) => (&e.from, "uses_type", &e.to),
+                ParsedEdge::ReturnsType(e) => (&e.from, "returns_type", &e.to),
+                ParsedEdge::HasField(e) => (&e.from, "has_field", &e.to),
+                ParsedEdge::Imports(e) => (&e.from, "imports", &e.to),
+            };
+            let _ = self.db.create_relation(from, relation, to).await;
+        }
+
+        Ok(())
+    }
+
+    /// Legacy regex-based entity extraction.
+    async fn index_code_entities_legacy(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
         let structs = extract_structs(content, path);
         let functions = extract_functions(content, path);
 
