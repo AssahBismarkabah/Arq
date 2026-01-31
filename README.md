@@ -1,191 +1,155 @@
-# Arq
+# Arq: Spec-Driven AI Code Engineering
 
-Arq is a spec-driven AI coding tool that ensures developers understand their codebase before generating code. It enforces a three-phase workflow: Research, Planning, and Implementation.
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Built with Rust](https://img.shields.io/badge/Built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
 
-## Quick Start
+Arq is a next-generation AI coding engine designed for deep codebase understanding and high-precision code generation. Unlike traditional AI coding tools that rely on simple RAG (Retrieval-Augmented Generation), Arq builds a comprehensive **Semantic Knowledge Graph** of your project, enabling it to reason about architectural patterns, dependencies, and cross-file impacts before writing a single line of code.
 
-```bash
-# Set your LLM provider
-export OPENAI_API_KEY="sk-..."  # or ANTHROPIC_API_KEY or OLLAMA_HOST
+---
 
-# Initialize knowledge graph (semantic search)
-arq init
+## 🏗 Philosophy: The Three-Phase Workflow
 
-# Create and run a task
-arq new "Add user authentication"
-arq research
-arq status
+Arq enforces a disciplined, spec-driven engineering process to eliminate hallucinations and ensure technical correctness.
 
-# Search your codebase semantically
-arq search "authentication handler"
-```
+1.  **Research**: Arq analyzes the codebase using its knowledge graph to validate the feasibility of a task, identify relevant patterns, and map out dependencies.
+2.  **Planning**: Based on the research, Arq generates a detailed technical specification and execution plan.
+3.  **Implementation**: An autonomous agent executes the approved plan, producing code that respects the project's existing architecture and idioms.
 
-## The Problem
+---
 
-AI generates code faster than developers can understand it. This creates knowledge debt that compounds over time, unmaintainable systems nobody fully understands, and erosion of engineering judgment and pattern recognition.
+## 🧠 Core Technologies
 
-Arq solves this by enforcing understanding before generation.
+### Semantic Knowledge Graph
+Built on **SurrealDB**, Arq's knowledge graph goes beyond simple text chunks. It uses **Tree-sitter** to parse your code into a rich ontology of entities:
+*   **Structural Nodes**: Files, Modules, Structs, Traits, Enums.
+*   **Behavioral Nodes**: Functions, Methods, Constants.
+*   **Relational Edges**: `Calls`, `DependsOn`, `Implements`, `Contains`.
 
-## Core Principles
+### Smart Context Gathering
+Instead of flooding the LLM with irrelevant files, Arq's **Smart Context** algorithm:
+1.  Performs **semantic vector search** to find relevant code entry points.
+2.  Traverses the **knowledge graph** to pull in critical dependencies and upstream callers.
+3.  Synthesizes a "context package" that gives the LLM a 360-degree view of the target logic.
 
-**Understand Before You Build.** No code generation without validated understanding. The research phase ensures the AI and developer share the same mental model of the codebase.
+### Local-First & High Performance
+*   **Rust-powered core** for maximum efficiency.
+*   **Local Vector Embeddings** (BGE-Small) ensure your code stays private.
+*   **RocksDB storage** for lightning-fast graph queries.
 
-**Human Decides, AI Executes.** Architectural decisions happen in planning, made by humans. The agent phase only implements what was explicitly approved.
+---
 
-**Spec as Contract.** The plan.yaml is a contract. The agent is bound to it. Deviations are flagged. No surprises, no scope creep, no hidden changes.
+## 🚀 Key Features
 
-**Transparency Over Speed.** Every AI action is visible. Side-by-side comparison of intent vs output. Conformance checking validates execution matches plan.
+*   **Multi-Language Support**: Native parsing for **Rust, TypeScript, JavaScript, Python, Go, Java, and C#**.
+*   **Interactive TUI**: A terminal-based collaborative environment for real-time task management.
+*   **Graph Visualizer**: A web-based interactive tool to explore your project's architecture and the AI's internal representation.
+*   **Spec-Driven**: Ensures deep understanding before generation, reducing iteration loops.
 
-## Installation
+---
 
-### Quick Install (Recommended)
+## 📦 Installation
 
-**macOS/Linux:**
+### Quick Install (macOS/Linux)
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.sh | sh
 ```
 
-**Windows (PowerShell):**
+### Windows (PowerShell)
 ```powershell
 irm https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.ps1 | iex
 ```
 
-**Homebrew (macOS/Linux):**
+### Homebrew
 ```bash
 brew install AssahBismarkabah/tap/arq
 ```
 
-### Build from Source
+---
 
-```bash
-git clone https://github.com/AssahBismarkabah/arq
-cd arq
-cargo build --release
-```
+## 🎯 Getting Started
 
-Or install directly:
-```bash
-cargo install --path crates/arq-cli
-```
+1. **Configure your LLM provider**:
+   ```bash
+   export OPENAI_API_KEY="sk-..."
+   ```
 
-## Data Storage
+2. **Initialize your project**:
+   ```bash
+   arq init
+   ```
+   *This indexes your codebase into the local knowledge graph.*
 
-Phase outputs are stored in your project's `.arq/` directory (add to `.gitignore` if desired):
+3. **Start a new task**:
+   ```bash
+   arq new "Implement JWT authentication handler"
+   ```
 
-- `.arq/research-doc.md` - Research findings for current task
-- `.arq/plan.yaml` - Implementation plan for current task
+4. **Execute the workflow**:
+   ```bash
+   arq research  # Phase 1: Analyze codebase
+   arq advance   # Phase 2: Create execution plan
+   arq advance   # Phase 3: Generate code
+   ```
 
-Internal data (knowledge graph, task metadata) is stored in `~/.arq/` to keep your project clean.
+---
 
-## Configuration
+## 🛠 Configuration
 
-Create an optional `arq.toml` in your project root:
+Create an optional `arq.toml` in your project root to customize Arq's behavior:
 
 ```toml
 [llm]
 provider = "openai"
 model = "gpt-4o"
-available_models = [
-    "gpt-4o",
-    "gpt-4o-mini",
-    "o1-preview",
-]
+available_models = ["gpt-4o", "gpt-4o-mini", "o1-preview"]
 
 [context]
-max_file_size = 102400
-max_total_size = 512000
-include_extensions = [
-    "rs",
-    "ts",
-    "py",
-    "go",
-    "js",
-    "tsx",
-    "jsx",
-]
-exclude_dirs = [
-    "node_modules",
-    "target",
-    ".git",
-    "dist",
-    "build",
-]
+max_file_size = 102400  # 100KB
+include_extensions = ["rs", "ts", "py", "go", "java", "cs"]
+exclude_dirs = ["node_modules", "target", ".git", "dist"]
 
 [knowledge]
 db_path = "knowledge.db"
-embedding_model = "BGESmallENV15"
 search_limit = 20
 ```
 
-### Reference
+### Configuration Reference
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
-| `[context]` | `max_file_size` | `102400` | Max bytes per file |
-| | `max_total_size` | `512000` | Max total context bytes |
-| | `include_extensions` | `[rs,ts,py..]` | File types to scan |
-| | `exclude_dirs` | `[node_modules..]` | Directories to skip |
-| `[llm]` | `provider` | `openai` | openai, anthropic, ollama |
-| | `model` | `gpt-4o` | Model name |
-| | `base_url` | — | API endpoint URL |
-| | `api_key` | — | API key (prefer env var) |
-| | `available_models` | — | Models to show in TUI selector |
-| `[storage]` | `data_dir` | `~/.arq` | Base directory for internal data |
-| `[knowledge]` | `db_path` | `knowledge.db` | Database directory |
-| | `embedding_model` | `BGESmallENV15` | Local embedding model |
-| | `search_limit` | `20` | Default search results |
+| `[llm]` | `provider` | `openai` | `openai`, `anthropic`, `ollama` |
+| | `model` | `gpt-4o` | Primary model for generation |
+| | `available_models` | — | Models for TUI selector |
+| `[context]` | `include_extensions` | — | File types to index |
+| `[knowledge]` | `db_path` | `knowledge.db` | Local database location |
+| | `embedding_model` | `BGESmallENV15` | Local embedding model used |
 
-### Environment Variables
+---
 
-| Variable | Description |
-|----------|-------------|
-| `OPENAI_API_KEY` | OpenAI API key |
-| `ANTHROPIC_API_KEY` | Anthropic API key |
-| `OLLAMA_HOST` | Ollama endpoint (e.g., `http://localhost:11434`) |
-| `ARQ_LLM_PROVIDER` | Override `llm.provider` |
-| `ARQ_LLM_MODEL` | Override `llm.model` |
-| `ARQ_DATA_DIR` | Override `storage.data_dir` |
+## 🛠 CLI Commands
 
-## CLI Commands
+| Command | Description |
+|---------|-------------|
+| `init` | Index codebase into the local knowledge graph |
+| `new` | Initialize a new task from a natural language prompt |
+| `research` | Execute the research phase to analyze the codebase and context |
+| `advance` | Progress the current task to the next phase (Research -> Planning -> Agent) |
+| `status` | Display the current task's progress and active phase |
+| `search` | Perform semantic vector search across the indexed codebase |
+| `tui` | Launch the interactive terminal user interface |
+| `serve` | Start the web-based knowledge graph visualization server |
+| `graph` | Query specific graph relationships (dependencies/impact) via CLI |
+| `kg-status` | Show detailed statistics about the indexed knowledge graph |
+| `list` | List all tasks managed by Arq |
+| `switch` | Switch the active context to a different task |
+| `delete` | Remove a task and its associated artifacts |
 
-```
-$ arq --help
-Spec-driven AI coding tool
+---
 
-Usage: arq <COMMAND>
+## 🤝 Contributing
 
-Commands:
-  new        Start a new task
-  status     Show current task status
-  list       List all tasks
-  delete     Delete a task
-  switch     Switch to a different task
-  research   Run research phase for current task
-  advance    Advance to the next phase
-  init       Index codebase into knowledge graph
-  search     Search code using semantic search
-  kg-status  Show knowledge graph statistics
-  graph      Query graph relationships (dependencies and impact)
-  tui        Launch interactive TUI chat interface
-  serve      Start visualization server for knowledge graph
-  help       Print this message or the help of the given subcommand(s)
-```
+We welcome contributions! Please see our [GitHub Issues](https://github.com/AssahBismarkabah/Arq/issues) for bug reports and feature requests.
 
-Use `arq <command> --help` for detailed options on any command.
+## 📄 License
 
-## Development
-
-```bash
-git clone https://github.com/AssahBismarkabah/arq
-cd arq
-cargo build --release
-cargo test
-```
-
-## Contributing
-
-Contributions welcome. Report bugs via GitHub issues, submit PRs against main branch, and follow existing code style.
-
-## License
-
-Apache License 2.0. See LICENSE file.
+Arq is released under the [Apache License 2.0](LICENSE).
