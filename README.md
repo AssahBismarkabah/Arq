@@ -17,7 +17,7 @@ Arq enforces a disciplined, spec-driven engineering process to eliminate halluci
 
 ---
 
-## 🧠 Core Technologies
+## Core Technologies
 
 ### Semantic Knowledge Graph
 Built on **SurrealDB**, Arq's knowledge graph goes beyond simple text chunks. It uses **Tree-sitter** to parse your code into a rich ontology of entities:
@@ -38,7 +38,7 @@ Instead of flooding the LLM with irrelevant files, Arq's **Smart Context** algor
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 *   **Multi-Language Support**: Native parsing for **Rust, TypeScript, JavaScript, Python, Go, Java, and C#**.
 *   **Interactive TUI**: A terminal-based collaborative environment for real-time task management.
@@ -66,7 +66,7 @@ brew install AssahBismarkabah/tap/arq
 
 ---
 
-## 🎯 Getting Started
+##  Getting Started
 
 1. **Configure your LLM provider**:
    ```bash
@@ -93,7 +93,7 @@ brew install AssahBismarkabah/tap/arq
 
 ---
 
-## 🛠 Configuration
+## Configuration
 
 Create an optional `arq.toml` in your project root to customize Arq's behavior:
 
@@ -101,12 +101,28 @@ Create an optional `arq.toml` in your project root to customize Arq's behavior:
 [llm]
 provider = "openai"
 model = "gpt-4o"
-available_models = ["gpt-4o", "gpt-4o-mini", "o1-preview"]
+available_models = [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "o1-preview"
+]
 
 [context]
 max_file_size = 102400  # 100KB
-include_extensions = ["rs", "ts", "py", "go", "java", "cs"]
-exclude_dirs = ["node_modules", "target", ".git", "dist"]
+include_extensions = [
+    "rs",
+    "ts",
+    "py",
+    "go",
+    "java",
+    "cs"
+]
+exclude_dirs = [
+    "node_modules",
+    "target",
+    ".git",
+    "dist"
+]
 
 [knowledge]
 db_path = "knowledge.db"
@@ -146,7 +162,7 @@ search_limit = 20
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [GitHub Issues](https://github.com/AssahBismarkabah/Arq/issues) for bug reports and feature requests.
 
