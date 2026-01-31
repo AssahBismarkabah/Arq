@@ -12,7 +12,9 @@ mod tui;
 #[derive(Parser)]
 #[command(name = "arq")]
 #[command(version)]
-#[command(about = "AI coding engine for deep codebase understanding and high-precision code generation")]
+#[command(
+    about = "AI coding engine for deep codebase understanding and high-precision code generation"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -326,7 +328,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             // Remove existing database if force re-indexing
             if force && db_path.exists() {
                 let pb = ProgressBar::new_spinner();
-                pb.set_style(ProgressStyle::default_spinner().template("{spinner:.cyan} {msg}").unwrap());
+                pb.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("{spinner:.cyan} {msg}")
+                        .unwrap(),
+                );
                 pb.set_message("Clearing existing knowledge graph...");
                 std::fs::remove_dir_all(&db_path)?;
                 pb.finish_with_message("Done");
@@ -334,7 +340,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
             // Step 1: Load embedding model
             let pb = ProgressBar::new_spinner();
-            pb.set_style(ProgressStyle::default_spinner().template("{spinner:.cyan} {msg}").unwrap());
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.cyan} {msg}")
+                    .unwrap(),
+            );
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
             pb.set_message("Loading embedding model (first run downloads ~50MB)...");
 
@@ -344,7 +354,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
             // Step 2: Index codebase
             let pb = ProgressBar::new_spinner();
-            pb.set_style(ProgressStyle::default_spinner().template("{spinner:.cyan} {msg}").unwrap());
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.cyan} {msg}")
+                    .unwrap(),
+            );
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
             pb.set_message("Indexing codebase...");
 
