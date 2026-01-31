@@ -253,6 +253,7 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "futures",
+ "indicatif",
  "open",
  "ratatui",
  "serde",
