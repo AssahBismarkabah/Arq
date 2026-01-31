@@ -13,7 +13,6 @@ Arq is a next-generation AI coding engine designed for deep codebase understandi
 
 Arq builds a comprehensive ** Knowlege Graph** of your project, enabling it to reason about architectural patterns, dependencies, andcross-file impacts before enabling you to make technically sound decisions before writing a single line of code.
 
----
 
 ## 🏗 Philosophy: The Three-Phase Workflow
 
