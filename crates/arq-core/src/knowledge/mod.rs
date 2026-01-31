@@ -189,7 +189,9 @@ impl KnowledgeGraph {
         let indexer =
             indexer::GenericIndexer::new(Arc::clone(&self.db), Arc::clone(&self.embedder));
 
-        indexer.index_directory_with_progress(path, on_progress).await
+        indexer
+            .index_directory_with_progress(path, on_progress)
+            .await
     }
 }
 
