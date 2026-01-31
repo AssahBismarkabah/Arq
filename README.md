@@ -79,10 +79,18 @@ Internal data (knowledge graph, task metadata) is stored in `~/.arq/` to keep yo
 
 ## Configuration
 
-Create an optional `arq.toml` in your project root. See [Configuration Reference](#configuration-reference) for all options.
+Create an optional `arq.toml` in your project root:
 
 ```toml
-# Example configuration
+[llm]
+provider = "openai"
+model = "gpt-4o"
+available_models = [
+    "gpt-4o",
+    "gpt-4o-mini",
+    "o1-preview",
+]
+
 [context]
 max_file_size = 102400
 max_total_size = 512000
@@ -103,15 +111,13 @@ exclude_dirs = [
     "build",
 ]
 
-[llm]
-provider = "openai"
-model = "gpt-4o"
-
 [knowledge]
+db_path = "knowledge.db"
+embedding_model = "BGESmallENV15"
 search_limit = 20
 ```
 
-### Configuration Reference
+### Reference
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
@@ -123,6 +129,7 @@ search_limit = 20
 | | `model` | `gpt-4o` | Model name |
 | | `base_url` | — | API endpoint URL |
 | | `api_key` | — | API key (prefer env var) |
+| | `available_models` | — | Models to show in TUI selector |
 | `[storage]` | `data_dir` | `~/.arq` | Base directory for internal data |
 | `[knowledge]` | `db_path` | `knowledge.db` | Database directory |
 | | `embedding_model` | `BGESmallENV15` | Local embedding model |
