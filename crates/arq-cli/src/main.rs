@@ -1,6 +1,6 @@
 use arq_core::{
-    Config, ContextBuilder, FileStorage, IndexStats, KnowledgeGraph, KnowledgeStore, Phase,
-    Provider, ResearchRunner, SearchResult, TaskManager,
+    Config, ContextBuilder, FileStorage, IndexProgress, IndexStats, KnowledgeGraph, KnowledgeStore,
+    Phase, Provider, ResearchRunner, SearchResult, TaskManager,
 };
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -340,32 +340,56 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 pb.finish_with_message("Done");
             }
 
-            // Step 1: Load embedding model
-            let pb = ProgressBar::new_spinner();
-            pb.set_style(
+            // Step 1: Load embedding model (spinner - can't show progress for model loading)
+            let spinner = ProgressBar::new_spinner();
+            spinner.set_style(
                 ProgressStyle::default_spinner()
                     .template("{spinner:.cyan} {msg}")
                     .unwrap(),
             );
-            pb.enable_steady_tick(std::time::Duration::from_millis(100));
-            pb.set_message("Loading embedding model (first run downloads ~50MB)...");
+            spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+            spinner.set_message("Loading embedding model (first run downloads ~50MB)...");
 
             let kg = KnowledgeGraph::open(&db_path).await?;
             kg.initialize().await?;
-            pb.finish_with_message("Done");
+            spinner.finish_with_message("Embedding model loaded");
 
-            // Step 2: Index codebase
-            let pb = ProgressBar::new_spinner();
-            pb.set_style(
+            // Step 2: Count files to index
+            let spinner = ProgressBar::new_spinner();
+            spinner.set_style(
                 ProgressStyle::default_spinner()
                     .template("{spinner:.cyan} {msg}")
                     .unwrap(),
             );
-            pb.enable_steady_tick(std::time::Duration::from_millis(100));
-            pb.set_message("Indexing codebase...");
+            spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+            spinner.set_message("Scanning codebase...");
 
-            let stats: IndexStats = kg.index_directory(Path::new(".")).await?;
-            pb.finish_with_message("Done");
+            let total_files = kg.count_indexable_files(Path::new("."));
+            spinner.finish_with_message(format!("Found {} files to index", total_files));
+
+            // Step 3: Index codebase with progress bar
+            let pb = ProgressBar::new(total_files as u64);
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{spinner:.cyan} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                    .unwrap()
+                    .progress_chars("=> "),
+            );
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+
+            let stats: IndexStats = kg
+                .index_directory_with_progress(Path::new("."), |progress: IndexProgress| {
+                    pb.set_position(progress.files_done as u64);
+                    // Show just the filename, not full path
+                    let filename = progress
+                        .current_file
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or(&progress.current_file);
+                    pb.set_message(filename.to_string());
+                })
+                .await?;
+            pb.finish_with_message("Complete");
 
             println!("\nKnowledge graph initialized!");
             println!("  Files indexed: {}", stats.files);

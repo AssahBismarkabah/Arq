@@ -42,6 +42,7 @@ pub mod parser;
 pub use db::{CallInfo, ExtendedIndexStats, ImplementsInfo, KnowledgeDb};
 pub use embedder::Embedder;
 pub use error::KnowledgeError;
+pub use indexer::IndexProgress;
 pub use models::{CodeChunk, FileNode, FunctionNode, IndexStats, SearchResult, StructNode};
 pub use parser::{ParseResult, Parser, ParserRegistry, RustParser};
 
@@ -63,6 +64,9 @@ pub trait KnowledgeStore: Send + Sync {
 
     /// Index a directory recursively.
     async fn index_directory(&self, path: &Path) -> Result<IndexStats, KnowledgeError>;
+
+    /// Count files that will be indexed (for progress bar setup).
+    fn count_indexable_files(&self, path: &Path) -> usize;
 
     /// Index a single file.
     async fn index_file(&self, path: &str, content: &str) -> Result<(), KnowledgeError>;
@@ -168,6 +172,25 @@ impl KnowledgeGraph {
     pub async fn list_indexed_files(&self) -> Result<Vec<String>, KnowledgeError> {
         self.db.list_indexed_files().await
     }
+
+    /// Index a directory with progress reporting.
+    ///
+    /// The callback receives progress updates as files are indexed.
+    pub async fn index_directory_with_progress<F>(
+        &self,
+        path: &Path,
+        on_progress: F,
+    ) -> Result<IndexStats, KnowledgeError>
+    where
+        F: Fn(IndexProgress) + Send + Sync,
+    {
+        use indexer::Indexer;
+
+        let indexer =
+            indexer::GenericIndexer::new(Arc::clone(&self.db), Arc::clone(&self.embedder));
+
+        indexer.index_directory_with_progress(path, on_progress).await
+    }
 }
 
 #[async_trait]
@@ -187,6 +210,15 @@ impl KnowledgeStore for KnowledgeGraph {
             indexer::GenericIndexer::new(Arc::clone(&self.db), Arc::clone(&self.embedder));
 
         indexer.index_directory(path).await
+    }
+
+    fn count_indexable_files(&self, path: &Path) -> usize {
+        use indexer::Indexer;
+
+        let indexer =
+            indexer::GenericIndexer::new(Arc::clone(&self.db), Arc::clone(&self.embedder));
+
+        indexer.count_indexable_files(path)
     }
 
     async fn index_file(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {

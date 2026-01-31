@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `arq init` now shows actual progress bar with file count instead of just spinner
+
 ## [0.2.0] - 2025-01-31
 
 ### Added

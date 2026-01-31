@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use super::extractor::{extract_calls, extract_functions, extract_line_range, extract_structs};
 use super::patterns::{CHUNK_OVERLAP, DEFAULT_EXTENSIONS, MAX_CHUNK_SIZE};
-use super::Indexer;
+use super::{IndexProgress, Indexer};
 use crate::knowledge::db::KnowledgeDb;
 use crate::knowledge::embedder::Embedder;
 use crate::knowledge::error::KnowledgeError;
@@ -267,8 +267,33 @@ impl GenericIndexer {
 
 #[async_trait]
 impl Indexer for GenericIndexer {
+    fn count_indexable_files(&self, path: &Path) -> usize {
+        let walker = WalkBuilder::new(path).hidden(true).git_ignore(true).build();
+
+        walker
+            .flatten()
+            .filter(|entry| {
+                let file_path = entry.path();
+                file_path.is_file() && self.should_index(file_path)
+            })
+            .count()
+    }
+
     async fn index_directory(&self, path: &Path) -> Result<IndexStats, KnowledgeError> {
+        // Delegate to progress version with no-op callback
+        self.index_directory_with_progress(path, |_| {}).await
+    }
+
+    async fn index_directory_with_progress<F>(
+        &self,
+        path: &Path,
+        on_progress: F,
+    ) -> Result<IndexStats, KnowledgeError>
+    where
+        F: Fn(IndexProgress) + Send + Sync,
+    {
         let mut stats = IndexStats::default();
+        let total = self.count_indexable_files(path);
 
         let walker = WalkBuilder::new(path).hidden(true).git_ignore(true).build();
 
@@ -284,6 +309,13 @@ impl Indexer for GenericIndexer {
                 .unwrap_or(file_path)
                 .to_string_lossy()
                 .to_string();
+
+            // Report progress
+            on_progress(IndexProgress {
+                current_file: relative_path.clone(),
+                files_done: stats.files,
+                files_total: total,
+            });
 
             match fs::read_to_string(file_path) {
                 Ok(content) => {
