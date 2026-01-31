@@ -1,0 +1,6 @@
+# Cargo configuration for cross-platform builds
+
+# Windows MSVC target: Use static CRT to match pre-built ONNX Runtime binaries
+# This avoids LNK2038 "RuntimeLibrary mismatch" errors
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-Ctarget-feature=+crt-static"]
