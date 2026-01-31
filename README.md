@@ -38,16 +38,34 @@ Arq solves this by enforcing understanding before generation.
 
 ## Installation
 
+### Quick Install (Recommended)
+
+**macOS/Linux:**
 ```bash
-cargo install --path crates/arq-cli
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.sh | sh
 ```
 
-Or build from source:
+**Windows (PowerShell):**
+```powershell
+irm https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.ps1 | iex
+```
+
+**Homebrew (macOS/Linux):**
+```bash
+brew install AssahBismarkabah/tap/arq
+```
+
+### Build from Source
 
 ```bash
 git clone https://github.com/AssahBismarkabah/arq
 cd arq
 cargo build --release
+```
+
+Or install directly:
+```bash
+cargo install --path crates/arq-cli
 ```
 
 ## Data Storage
@@ -95,89 +113,58 @@ search_limit = 20
 
 ### Configuration Reference
 
-#### `[context]` - Codebase scanning settings
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_file_size` | `102400` | Max bytes per file |
-| `max_total_size` | `512000` | Max total context bytes |
-| `include_extensions` | `[rs,ts,py..]` | File types to scan |
-| `exclude_dirs` | `[node_modules..]` | Directories to skip |
-
-#### `[llm]` - LLM provider settings
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `provider` | `openai` | openai, anthropic, ollama |
-| `model` | `gpt-4o` | Model name |
-| `base_url` | (per provider) | API endpoint URL |
-| `api_key` | (from env) | API key (prefer env var) |
-
-#### `[storage]` - Data persistence settings
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `data_dir` | `~/.arq` | Base directory |
-| `tasks_dir` | `tasks` | Tasks subdirectory |
-| `task_file` | `task.json` | Task metadata file |
-| `research_file` | `research-doc.md` | Research output file |
-| `plan_file` | `plan.yaml` | Plan output file |
-
-#### `[knowledge]` - Knowledge graph settings
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `db_path` | `knowledge.db` | Database directory |
-| `embedding_model` | `BGESmallENV15` | Local embedding model |
-| `max_chunk_size` | `1000` | Max chunk size (chars) |
-| `chunk_overlap` | `100` | Overlap between chunks |
-| `search_limit` | `20` | Default search results |
+| Section | Key | Default | Description |
+|---------|-----|---------|-------------|
+| `[context]` | `max_file_size` | `102400` | Max bytes per file |
+| | `max_total_size` | `512000` | Max total context bytes |
+| | `include_extensions` | `[rs,ts,py..]` | File types to scan |
+| | `exclude_dirs` | `[node_modules..]` | Directories to skip |
+| `[llm]` | `provider` | `openai` | openai, anthropic, ollama |
+| | `model` | `gpt-4o` | Model name |
+| | `base_url` | — | API endpoint URL |
+| | `api_key` | — | API key (prefer env var) |
+| `[storage]` | `data_dir` | `~/.arq` | Base directory for internal data |
+| `[knowledge]` | `db_path` | `knowledge.db` | Database directory |
+| | `embedding_model` | `BGESmallENV15` | Local embedding model |
+| | `search_limit` | `20` | Default search results |
 
 ### Environment Variables
 
-Environment variables override `arq.toml` settings:
-
-| Variable | Overrides |
-|----------|-----------|
-| `ARQ_LLM_PROVIDER` | `llm.provider` |
-| `ARQ_LLM_MODEL` | `llm.model` |
-| `ARQ_LLM_BASE_URL` | `llm.base_url` |
-| `ARQ_LLM_API_KEY` | `llm.api_key` |
-| `ARQ_DATA_DIR` | `storage.data_dir` |
-
-Provider-specific keys (auto-detected):
-
 | Variable | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` | For OpenAI provider |
-| `ANTHROPIC_API_KEY` | For Anthropic provider |
-| `OLLAMA_HOST` | For Ollama provider (e.g., `http://localhost:11434`) |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `OLLAMA_HOST` | Ollama endpoint (e.g., `http://localhost:11434`) |
+| `ARQ_LLM_PROVIDER` | Override `llm.provider` |
+| `ARQ_LLM_MODEL` | Override `llm.model` |
+| `ARQ_DATA_DIR` | Override `storage.data_dir` |
 
 ## CLI Commands
 
-### Task Management
+```
+$ arq --help
+Spec-driven AI coding tool
 
-| Command | Description |
-|---------|-------------|
-| `arq new "<prompt>"` | Create a new task |
-| `arq status` | Show current task status |
-| `arq list` | List all tasks |
-| `arq switch <id>` | Switch to a task |
-| `arq delete <id>` | Delete a task |
-| `arq research` | Run research phase |
-| `arq advance` | Advance to next phase |
+Usage: arq <COMMAND>
 
-### Knowledge Graph
+Commands:
+  new        Start a new task
+  status     Show current task status
+  list       List all tasks
+  delete     Delete a task
+  switch     Switch to a different task
+  research   Run research phase for current task
+  advance    Advance to the next phase
+  init       Index codebase into knowledge graph
+  search     Search code using semantic search
+  kg-status  Show knowledge graph statistics
+  graph      Query graph relationships (dependencies and impact)
+  tui        Launch interactive TUI chat interface
+  serve      Start visualization server for knowledge graph
+  help       Print this message or the help of the given subcommand(s)
+```
 
-| Command | Description |
-|---------|-------------|
-| `arq init` | Index codebase into knowledge graph |
-| `arq init --force` | Force re-index (rebuilds from scratch) |
-| `arq search "<query>"` | Semantic code search |
-| `arq search "<query>" -l 5` | Search with result limit |
-| `arq kg-status` | Show knowledge graph statistics |
-
-The knowledge graph enables semantic search (find code by meaning, not just keywords), faster research (relevant context ~5KB vs full dump ~500KB), and local embeddings (no API calls for embedding generation).
+Use `arq <command> --help` for detailed options on any command.
 
 ## Development
 
