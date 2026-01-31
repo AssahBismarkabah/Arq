@@ -24,6 +24,8 @@ targets = [
     "x86_64-pc-windows-msvc",
 ]
 
-# Use native Apple Silicon runner for arm64 macOS builds
+# Custom runners for specific targets
 [dist.github-custom-runners]
 aarch64-apple-darwin = "macos-14"
+# Use windows-latest to get the newest VS2022 (17.11+) required by ONNX Runtime
+x86_64-pc-windows-msvc = "windows-latest"
