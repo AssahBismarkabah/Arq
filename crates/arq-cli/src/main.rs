@@ -82,6 +82,8 @@ enum Commands {
         #[arg(long)]
         no_open: bool,
     },
+    /// Upgrade to the latest version
+    Upgrade,
 }
 
 #[derive(Subcommand)]
@@ -554,6 +556,26 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             serve::start_server(serve_config).await?;
+        }
+        Commands::Upgrade => {
+            let current_version = env!("CARGO_PKG_VERSION");
+            println!("Current version: {}", current_version);
+            println!("Checking for updates...\n");
+
+            #[cfg(target_os = "windows")]
+            {
+                println!("To upgrade on Windows, run:");
+                println!("  irm https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.ps1 | iex");
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                println!("To upgrade on macOS/Linux, run:");
+                println!("  curl --proto '=https' --tlsv1.2 -LsSf https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.sh | sh");
+            }
+
+            println!("\nOr use Homebrew:");
+            println!("  brew upgrade arq");
         }
     }
 
