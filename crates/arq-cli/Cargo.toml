@@ -1,6 +1,6 @@
 [package]
 name = "arq-cli"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Arq - AI-powered code analysis and research tool with semantic search and knowledge graph visualization"
 license = "MIT"

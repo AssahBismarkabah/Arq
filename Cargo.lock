@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "arq-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "arq-core",
  "axum",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "arq-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-trait",
  "chrono",
