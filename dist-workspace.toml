@@ -9,6 +9,9 @@ cargo-dist-version = "0.30.3"
 # CI backends to support
 ci = "github"
 
+# Use dynamic CRT linking on Windows to match ONNX Runtime pre-built binaries
+msvc-crt-static = false
+
 # The installers to generate for each app
 installers = [
     "shell",      # Unix: curl | sh
@@ -27,5 +30,5 @@ targets = [
 # Custom runners for specific targets
 [dist.github-custom-runners]
 aarch64-apple-darwin = "macos-14"
-# Use windows-latest to get the newest VS2022 (17.11+) required by ONNX Runtime
+# Use windows-latest for VS2022 17.13+ required by ONNX Runtime
 x86_64-pc-windows-msvc = "windows-latest"
