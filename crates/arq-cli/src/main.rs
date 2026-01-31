@@ -6,12 +6,14 @@ use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 
+mod banner;
 mod serve;
 mod tui;
 
 #[derive(Parser)]
 #[command(name = "arq")]
 #[command(version)]
+#[command(before_help = banner::banner_help())]
 #[command(
     about = "AI coding engine for deep codebase understanding and high-precision code generation"
 )]

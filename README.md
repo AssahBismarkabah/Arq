@@ -1,9 +1,17 @@
-# Arq: Spec-Driven AI Code Engineering
+![Arq](assets/Arq.png)
 
+![GitHub Release](https://img.shields.io/github/v/release/AssahBismarkabah/Arq?label=latest%20release)
+[![CI](https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml/badge.svg)](https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml)
+[![Release](https://github.com/AssahBismarkabah/Arq/actions/workflows/release.yml/badge.svg)](https://github.com/AssahBismarkabah/Arq/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Built with Rust](https://img.shields.io/badge/Built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
+![GitHub Repo stars](https://img.shields.io/github/stars/AssahBismarkabah/Arq?style=flat)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/AssahBismarkabah/Arq)
 
-Arq is a next-generation AI coding engine designed for deep codebase understanding and high-precision code generation. Unlike traditional AI coding tools that rely on simple RAG (Retrieval-Augmented Generation), Arq builds a comprehensive **Semantic Knowledge Graph** of your project, enabling it to reason about architectural patterns, dependencies, and cross-file impacts before writing a single line of code.
+# Spec-first AI agent
+
+Arq is a next-generation AI coding engine designed for deep codebase understanding and high-precision ai assisted development. Unliketraditional AI coding tools that rely on simple RAG (Retrieval-Augmented Generation), 
+
+Arq builds a comprehensive ** Knowlege Graph** of your project, enabling it to reason about architectural patterns, dependencies, andcross-file impacts before enabling you to make technically sound decisions before writing a single line of code.
 
 ---
 

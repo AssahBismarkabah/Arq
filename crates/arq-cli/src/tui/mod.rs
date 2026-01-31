@@ -21,11 +21,16 @@ use std::io::stdout;
 use app::App;
 use arq_core::{Config, FileStorage, TaskManager};
 
+use crate::banner;
+
 /// Run the TUI application.
 pub async fn run(
     config: Config,
     manager: TaskManager<FileStorage>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Show banner before entering TUI
+    banner::print_banner();
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = stdout();
