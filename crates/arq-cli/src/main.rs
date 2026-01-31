@@ -3,6 +3,7 @@ use arq_core::{
     Provider, ResearchRunner, SearchResult, TaskManager,
 };
 use clap::{Parser, Subcommand};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 
 mod serve;
@@ -10,7 +11,10 @@ mod tui;
 
 #[derive(Parser)]
 #[command(name = "arq")]
-#[command(about = "Spec-driven AI coding tool", long_about = None)]
+#[command(version)]
+#[command(
+    about = "AI coding engine for deep codebase understanding and high-precision code generation"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -59,6 +63,8 @@ enum Commands {
     },
     /// Show knowledge graph statistics
     KgStatus,
+    /// Clear the knowledge graph database
+    KgClear,
     /// Query graph relationships (dependencies and impact)
     Graph {
         #[command(subcommand)]
@@ -76,6 +82,8 @@ enum Commands {
         #[arg(long)]
         no_open: bool,
     },
+    /// Upgrade to the latest version
+    Upgrade,
 }
 
 #[derive(Subcommand)]
@@ -321,27 +329,49 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
             // Remove existing database if force re-indexing
             if force && db_path.exists() {
-                println!("Removing existing knowledge graph...");
+                let pb = ProgressBar::new_spinner();
+                pb.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("{spinner:.cyan} {msg}")
+                        .unwrap(),
+                );
+                pb.set_message("Clearing existing knowledge graph...");
                 std::fs::remove_dir_all(&db_path)?;
+                pb.finish_with_message("Done");
             }
 
-            println!("Initializing knowledge graph...");
-            println!("Loading embedding model (this may take a moment on first run)...");
+            // Step 1: Load embedding model
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.cyan} {msg}")
+                    .unwrap(),
+            );
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+            pb.set_message("Loading embedding model (first run downloads ~50MB)...");
 
             let kg = KnowledgeGraph::open(&db_path).await?;
             kg.initialize().await?;
+            pb.finish_with_message("Done");
 
-            println!("Indexing codebase...");
+            // Step 2: Index codebase
+            let pb = ProgressBar::new_spinner();
+            pb.set_style(
+                ProgressStyle::default_spinner()
+                    .template("{spinner:.cyan} {msg}")
+                    .unwrap(),
+            );
+            pb.enable_steady_tick(std::time::Duration::from_millis(100));
+            pb.set_message("Indexing codebase...");
+
             let stats: IndexStats = kg.index_directory(Path::new(".")).await?;
+            pb.finish_with_message("Done");
 
             println!("\nKnowledge graph initialized!");
             println!("  Files indexed: {}", stats.files);
             println!("  Code chunks: {}", stats.chunks);
             println!("  Total size: {} KB", stats.total_size / 1024);
-            if let Some(ref updated) = stats.last_updated {
-                println!("  Last updated: {}", updated.format("%Y-%m-%d %H:%M"));
-            }
-            println!("\nDatabase stored at: {}", db_path.display());
+            println!("\nDatabase: {}", db_path.display());
         }
         Commands::Search { query, limit } => {
             let db_path = config.knowledge.db_full_path(&config.storage);
@@ -407,6 +437,18 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("    Calls: {}", stats.calls);
             println!("    Implements: {}", stats.implements);
             println!("\nDatabase path: {}", db_path.display());
+        }
+        Commands::KgClear => {
+            let db_path = config.knowledge.db_full_path(&config.storage);
+
+            if !db_path.exists() {
+                println!("Knowledge graph not initialized. Nothing to clear.");
+                return Ok(());
+            }
+
+            std::fs::remove_dir_all(&db_path)?;
+            println!("Knowledge graph cleared.");
+            println!("Run 'arq init' to re-index your codebase.");
         }
         Commands::Graph { action } => {
             let db_path = config.knowledge.db_full_path(&config.storage);
@@ -514,6 +556,26 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             serve::start_server(serve_config).await?;
+        }
+        Commands::Upgrade => {
+            let current_version = env!("CARGO_PKG_VERSION");
+            println!("Current version: {}", current_version);
+            println!("Checking for updates...\n");
+
+            #[cfg(target_os = "windows")]
+            {
+                println!("To upgrade on Windows, run:");
+                println!("  irm https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.ps1 | iex");
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                println!("To upgrade on macOS/Linux, run:");
+                println!("  curl --proto '=https' --tlsv1.2 -LsSf https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-installer.sh | sh");
+            }
+
+            println!("\nOr use Homebrew:");
+            println!("  brew upgrade arq");
         }
     }
 
