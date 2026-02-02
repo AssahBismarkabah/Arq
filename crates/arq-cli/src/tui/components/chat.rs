@@ -80,7 +80,7 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     // Build all lines with proper wrapping
     let mut all_lines: Vec<Line> = Vec::new();
 
-    for msg in &app.chat_messages {
+    for msg in app.chat_messages() {
         let (prefix_style, content_style) = match msg.role {
             MessageRole::User => (
                 Style::default()
@@ -150,11 +150,11 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     let total_lines = all_lines.len();
 
     // Auto-scroll to bottom unless user has scrolled up
-    let start_index = if app.scroll_offset > 0 {
+    let start_index = if app.scroll_offset() > 0 {
         // User has scrolled up - show earlier content
         total_lines
             .saturating_sub(visible_height)
-            .saturating_sub(app.scroll_offset)
+            .saturating_sub(app.scroll_offset())
     } else {
         // Auto-scroll to bottom
         total_lines.saturating_sub(visible_height)

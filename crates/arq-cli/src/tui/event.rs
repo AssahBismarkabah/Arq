@@ -5,7 +5,7 @@ use futures::{FutureExt, StreamExt};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use arq_core::{ResearchDoc, ResearchProgress};
+use arq_core::{ApproachOptions, Plan, PlanningProgress, ResearchDoc, ResearchProgress};
 
 /// Result of a completed research task.
 #[derive(Debug, Clone)]
@@ -14,6 +14,24 @@ pub struct ResearchResult {
     pub task_id: String,
     /// The research document
     pub doc: ResearchDoc,
+}
+
+/// Result of generated approaches.
+#[derive(Debug, Clone)]
+pub struct ApproachesResult {
+    /// The task ID
+    pub task_id: String,
+    /// The generated approaches
+    pub options: ApproachOptions,
+}
+
+/// Result of a completed planning task.
+#[derive(Debug, Clone)]
+pub struct PlanningResult {
+    /// The task ID for persistence
+    pub task_id: String,
+    /// The generated plan
+    pub plan: Plan,
 }
 
 /// Events that can occur in the application.
@@ -33,6 +51,14 @@ pub enum Event {
     ResearchComplete(ResearchResult),
     /// Research failed with error message
     ResearchFailed(String),
+    /// Planning progress update
+    PlanningProgress(PlanningProgress),
+    /// Planning approaches generated
+    PlanningApproaches(ApproachesResult),
+    /// Planning completed successfully with full plan
+    PlanningComplete(PlanningResult),
+    /// Planning failed with error message
+    PlanningFailed(String),
 }
 
 /// Handles events from various sources.

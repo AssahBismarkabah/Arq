@@ -170,10 +170,19 @@ impl OpenAIClient {
             .choices
             .into_iter()
             .next()
-            .map(|c| c.message.content)
-            .unwrap_or_default();
+            .map(|c| c.message.content);
 
-        Ok(content)
+        match content {
+            Some(text) if !text.is_empty() => Ok(text),
+            Some(_) => Err(LLMError::ParseError(format!(
+                "LLM returned empty content. Raw response: {}",
+                &response_text[..response_text.len().min(500)]
+            ))),
+            None => Err(LLMError::ParseError(format!(
+                "LLM response had no choices. Raw response: {}",
+                &response_text[..response_text.len().min(500)]
+            ))),
+        }
     }
 
     /// Send a streaming request and forward chunks through the channel.

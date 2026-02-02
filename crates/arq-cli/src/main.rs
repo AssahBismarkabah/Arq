@@ -74,7 +74,11 @@ enum Commands {
     },
     /// Launch interactive TUI chat interface
     #[command(alias = "ui")]
-    Tui,
+    Tui {
+        /// Continue from previous session (restore task state)
+        #[arg(short, long)]
+        r#continue: bool,
+    },
     /// Start visualization server for knowledge graph
     Serve {
         /// Port to run the server on
@@ -562,8 +566,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        Commands::Tui => {
-            tui::run(config, manager).await?;
+        Commands::Tui { r#continue } => {
+            tui::run(config, manager, r#continue).await?;
         }
         Commands::Serve { port, no_open } => {
             let db_path = config.knowledge.db_full_path(&config.storage);

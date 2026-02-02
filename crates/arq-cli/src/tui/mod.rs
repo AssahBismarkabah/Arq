@@ -24,9 +24,13 @@ use arq_core::{Config, FileStorage, TaskManager};
 use crate::banner;
 
 /// Run the TUI application.
+///
+/// If `restore_state` is true, the TUI will restore the previous task state
+/// and show relevant context. If false, it starts with a clean welcome screen.
 pub async fn run(
     config: Config,
     manager: TaskManager<FileStorage>,
+    restore_state: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Show banner before entering TUI
     banner::print_banner();
@@ -39,7 +43,7 @@ pub async fn run(
     let mut terminal = Terminal::new(backend)?;
 
     // Create app state
-    let mut app = App::new(config, manager);
+    let mut app = App::new(config, manager, restore_state);
 
     // Run the main loop
     let result = app.run(&mut terminal).await;

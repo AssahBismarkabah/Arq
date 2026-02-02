@@ -20,7 +20,9 @@ pub use knowledge::{
 pub use llm::{ClaudeClient, LLMError, OpenAIClient, Provider, StreamChunk, LLM};
 pub use manager::{ManagerError, TaskManager};
 pub use phase::Phase;
-pub use planning::Plan;
+pub use planning::{
+    Approach, ApproachOptions, Plan, PlanningError, PlanningProgress, PlanningRunner,
+};
 pub use research::{ResearchDoc, ResearchError, ResearchProgress, ResearchRunner};
 pub use storage::{FileStorage, Storage, StorageError};
 pub use task::{Task, TaskError, TaskSummary};

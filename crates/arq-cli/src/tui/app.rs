@@ -7,11 +7,12 @@ use std::io::Stdout;
 use tokio::sync::mpsc;
 
 use arq_core::{
-    Config, ContextBuilder, FileStorage, KnowledgeGraph, KnowledgeStore, ResearchDoc,
-    ResearchProgress, ResearchRunner, Task, TaskManager,
+    Approach, ApproachOptions, Config, ContextBuilder, FileStorage, KnowledgeGraph, KnowledgeStore,
+    Plan, PlanningProgress, PlanningRunner, ResearchDoc, ResearchProgress, ResearchRunner, Task,
+    TaskManager,
 };
 
-use super::event::{Event, EventHandler, ResearchResult};
+use super::event::{ApproachesResult, Event, EventHandler, PlanningResult, ResearchResult};
 use super::ui;
 
 /// The selected tab in the TUI.
@@ -80,6 +81,32 @@ pub enum ResearchState {
     },
     /// Processing user correction
     Refining,
+}
+
+/// Planning phase state.
+#[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // Fields stored for future display/debugging
+pub enum PlanningState {
+    /// No planning in progress
+    #[default]
+    Idle,
+    /// Generating implementation approaches
+    GeneratingApproaches,
+    /// Awaiting user selection of an approach
+    AwaitingSelection {
+        task_id: String,
+        approaches: ApproachOptions,
+    },
+    /// Generating plan from selected approach
+    GeneratingPlan {
+        task_id: String,
+        selected_approach: Approach,
+    },
+    /// Awaiting user approval of generated plan
+    AwaitingApproval {
+        task_id: String,
+        pending_plan: Plan,
+    },
 }
 
 /// A chat message in the conversation.
@@ -190,8 +217,12 @@ pub struct App {
     pub selected_tab: SelectedTab,
     /// Current input mode
     pub input_mode: InputMode,
-    /// Chat messages for current tab
-    pub chat_messages: Vec<ChatMessage>,
+    /// Chat messages for Researcher tab
+    pub researcher_messages: Vec<ChatMessage>,
+    /// Chat messages for Planner tab
+    pub planner_messages: Vec<ChatMessage>,
+    /// Chat messages for Agent tab
+    pub agent_messages: Vec<ChatMessage>,
     /// Input buffer for user typing
     pub input_buffer: String,
     /// Progress items for current operation
@@ -202,8 +233,8 @@ pub struct App {
     pub stream_buffer: String,
     /// Whether the app should quit
     pub should_quit: bool,
-    /// Scroll offset for chat
-    pub scroll_offset: usize,
+    /// Scroll offset for chat (per tab)
+    pub scroll_offsets: [usize; 3],
     /// Configuration
     pub config: Config,
     /// Task manager for persistence
@@ -214,6 +245,8 @@ pub struct App {
     pub status_message: Option<String>,
     /// Research validation state
     pub research_state: ResearchState,
+    /// Planning phase state
+    pub planning_state: PlanningState,
     /// Index of currently selected model in available_models
     pub selected_model_index: usize,
     /// Tick counter for cycling messages
@@ -225,8 +258,15 @@ pub struct App {
 
 impl App {
     /// Create a new app instance.
-    pub fn new(config: Config, manager: TaskManager<FileStorage>) -> Self {
-        let current_task = manager.get_current_task().ok().flatten();
+    ///
+    /// If `restore_state` is true, restores the previous task context and shows
+    /// relevant messages. If false, starts with a clean welcome screen.
+    pub fn new(config: Config, manager: TaskManager<FileStorage>, restore_state: bool) -> Self {
+        let current_task = if restore_state {
+            manager.get_current_task().ok().flatten()
+        } else {
+            None
+        };
 
         // Find the index of the current model in available_models
         let selected_model_index = if !config.llm.available_models.is_empty() {
@@ -244,37 +284,99 @@ impl App {
         let mut app = Self {
             selected_tab: SelectedTab::Researcher,
             input_mode: InputMode::Normal,
-            chat_messages: Vec::new(),
+            researcher_messages: Vec::new(),
+            planner_messages: Vec::new(),
+            agent_messages: Vec::new(),
             input_buffer: String::new(),
             progress_items: Vec::new(),
             is_streaming: false,
             stream_buffer: String::new(),
             should_quit: false,
-            scroll_offset: 0,
+            scroll_offsets: [0; 3],
             config,
             manager,
             current_task: current_task.clone(),
             status_message: None,
             research_state: ResearchState::Idle,
+            planning_state: PlanningState::Idle,
             selected_model_index,
             tick_count: 0,
             knowledge_graph: None, // Initialized lazily during first research
         };
 
-        // Add welcome message
+        // Restore state from current task
         if let Some(ref task) = current_task {
-            app.chat_messages.push(ChatMessage::system(format!(
+            // Add welcome message to researcher tab
+            app.researcher_messages.push(ChatMessage::system(format!(
                 "Current task: {} ({})",
                 task.name,
                 task.phase.display_name()
             )));
+
+            // Restore tab and state based on task phase
+            match task.phase {
+                arq_core::Phase::Research => {
+                    app.selected_tab = SelectedTab::Researcher;
+                    if let Some(ref doc) = task.research_doc {
+                        // Research is complete, show summary
+                        app.researcher_messages.push(ChatMessage::assistant(format!(
+                            "**Previous Research Summary:**\n{}\n\n**Suggested Approach:**\n{}",
+                            doc.summary, doc.suggested_approach
+                        )));
+                        app.researcher_messages.push(ChatMessage::system(
+                            "Research complete. Press Tab to switch to Planner tab.",
+                        ));
+                    }
+                }
+                arq_core::Phase::Planning => {
+                    app.selected_tab = SelectedTab::Planner;
+                    // Show research summary in researcher tab
+                    if let Some(ref doc) = task.research_doc {
+                        app.researcher_messages.push(ChatMessage::assistant(format!(
+                            "**Research Summary:**\n{}",
+                            doc.summary
+                        )));
+                        app.researcher_messages.push(ChatMessage::system(
+                            "Research complete.",
+                        ));
+                    }
+                    // Show plan or prompt in planner tab
+                    if let Some(ref plan) = task.plan {
+                        if let Ok(yaml) = plan.to_yaml() {
+                            app.planner_messages.push(ChatMessage::assistant(format!(
+                                "**Saved Plan:**\n```yaml\n{}\n```",
+                                yaml
+                            )));
+                        }
+                        app.planner_messages.push(ChatMessage::system(
+                            "Plan complete. Press Tab to switch to Agent tab.",
+                        ));
+                    } else {
+                        app.planner_messages.push(ChatMessage::system(
+                            "Press [i] then Enter to generate implementation approaches.",
+                        ));
+                    }
+                }
+                arq_core::Phase::Agent => {
+                    app.selected_tab = SelectedTab::Agent;
+                    app.agent_messages.push(ChatMessage::system(
+                        "Agent phase ready. (Implementation pending)",
+                    ));
+                }
+                arq_core::Phase::Complete => {
+                    app.selected_tab = SelectedTab::Agent;
+                    app.agent_messages.push(ChatMessage::system(
+                        "Task complete! All phases finished.",
+                    ));
+                }
+            }
         } else {
-            app.chat_messages.push(ChatMessage::system(
+            app.researcher_messages.push(ChatMessage::system(
                 "Welcome to Arq! No active task. Type a prompt to start research.",
             ));
         }
 
-        // Initialize progress items for research phase
+        // Initialize progress items for current tab
         app.reset_progress_items();
 
         app
@@ -337,10 +439,8 @@ impl App {
                     }
                     Event::StreamComplete => {
                         if !self.stream_buffer.is_empty() {
-                            self.chat_messages
-                                .push(ChatMessage::assistant(std::mem::take(
-                                    &mut self.stream_buffer,
-                                )));
+                            let content = std::mem::take(&mut self.stream_buffer);
+                            self.chat_messages_mut().push(ChatMessage::assistant(content));
                         }
                         self.is_streaming = false;
                     }
@@ -352,6 +452,18 @@ impl App {
                     }
                     Event::ResearchFailed(error) => {
                         self.handle_research_failed(error);
+                    }
+                    Event::PlanningProgress(progress) => {
+                        self.handle_planning_progress(progress);
+                    }
+                    Event::PlanningApproaches(result) => {
+                        self.handle_planning_approaches(result);
+                    }
+                    Event::PlanningComplete(result) => {
+                        self.handle_planning_complete(result);
+                    }
+                    Event::PlanningFailed(error) => {
+                        self.handle_planning_failed(error);
                     }
                 }
             }
@@ -396,7 +508,7 @@ impl App {
                 self.set_progress_status(4, ProgressStatus::Complete);
             }
             ResearchProgress::Error(msg) => {
-                self.chat_messages
+                self.chat_messages_mut()
                     .push(ChatMessage::system(format!("Error: {}", msg)));
                 // Mark current item as failed
                 for item in &mut self.progress_items {
@@ -422,7 +534,7 @@ impl App {
 
         // Use the document's built-in markdown formatting for complete display
         let content = result.doc.to_markdown();
-        self.chat_messages.push(ChatMessage::assistant(&content));
+        self.chat_messages_mut().push(ChatMessage::assistant(&content));
 
         // Set awaiting validation state (DON'T save yet - wait for approval)
         self.research_state = ResearchState::AwaitingValidation {
@@ -431,7 +543,7 @@ impl App {
         };
 
         // Prompt user for validation
-        self.chat_messages.push(ChatMessage::system(
+        self.chat_messages_mut().push(ChatMessage::system(
             "Is this understanding correct?\n\
              Press [a] to approve and save, or type corrections.",
         ));
@@ -443,7 +555,7 @@ impl App {
     fn handle_research_failed(&mut self, error: String) {
         self.is_streaming = false;
         self.research_state = ResearchState::Idle;
-        self.chat_messages
+        self.chat_messages_mut()
             .push(ChatMessage::system(format!("Research failed: {}", error)));
 
         // Mark progress as failed
@@ -455,20 +567,164 @@ impl App {
         }
     }
 
+    /// Handle planning progress updates.
+    fn handle_planning_progress(&mut self, progress: PlanningProgress) {
+        match progress {
+            PlanningProgress::Started => {
+                self.set_progress_status(0, ProgressStatus::InProgress);
+            }
+            PlanningProgress::LoadingResearch => {
+                self.set_progress_status(0, ProgressStatus::InProgress);
+            }
+            PlanningProgress::GeneratingApproaches => {
+                self.set_progress_status(0, ProgressStatus::Complete);
+                self.set_progress_status(1, ProgressStatus::InProgress);
+            }
+            PlanningProgress::ApproachesReady(count) => {
+                self.set_progress_status(1, ProgressStatus::Complete);
+                self.status_message = Some(format!("Generated {} approaches", count));
+            }
+            PlanningProgress::GeneratingSpec => {
+                self.set_progress_status(2, ProgressStatus::InProgress);
+            }
+            PlanningProgress::CheckingComplexity => {
+                self.set_progress_status(2, ProgressStatus::Complete);
+                self.set_progress_status(3, ProgressStatus::InProgress);
+            }
+            PlanningProgress::Complete => {
+                self.set_progress_status(3, ProgressStatus::Complete);
+            }
+            PlanningProgress::Error(msg) => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system(format!("Planning error: {}", msg)));
+                for item in &mut self.progress_items {
+                    if item.status == ProgressStatus::InProgress {
+                        item.status = ProgressStatus::Failed;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Handle approaches generated.
+    fn handle_planning_approaches(&mut self, result: ApproachesResult) {
+        self.is_streaming = false;
+
+        // Display approaches for user selection
+        let content = result.options.to_display_string();
+        self.chat_messages_mut().push(ChatMessage::assistant(&content));
+
+        // Add instruction
+        self.chat_messages_mut().push(ChatMessage::system(
+            "Press [i] to edit, type 1/2/3 (or custom approach), then Enter.",
+        ));
+
+        // Set awaiting selection state
+        self.planning_state = PlanningState::AwaitingSelection {
+            task_id: result.task_id,
+            approaches: result.options,
+        };
+
+        self.status_message =
+            Some("[i] Edit → type 1/2/3 → Enter to select".to_string());
+    }
+
+    /// Handle planning complete.
+    fn handle_planning_complete(&mut self, result: PlanningResult) {
+        self.is_streaming = false;
+
+        // Display plan for approval
+        let content = match result.plan.to_yaml() {
+            Ok(yaml) => format!("## Generated Plan\n\n```yaml\n{}\n```", yaml),
+            Err(_) => format!("{:?}", result.plan),
+        };
+        self.chat_messages_mut().push(ChatMessage::assistant(&content));
+
+        // Set awaiting approval state
+        self.planning_state = PlanningState::AwaitingApproval {
+            task_id: result.task_id,
+            pending_plan: result.plan,
+        };
+
+        self.chat_messages_mut().push(ChatMessage::system(
+            "Press [a] to approve and save the plan, or type refinements.",
+        ));
+        self.status_message = Some("Awaiting approval... [a] approve, [i] type refinements".to_string());
+    }
+
+    /// Handle planning failure.
+    fn handle_planning_failed(&mut self, error: String) {
+        self.is_streaming = false;
+        self.planning_state = PlanningState::Idle;
+        self.chat_messages_mut()
+            .push(ChatMessage::system(format!("Planning failed: {}", error)));
+
+        for item in &mut self.progress_items {
+            if item.status == ProgressStatus::InProgress {
+                item.status = ProgressStatus::Failed;
+                break;
+            }
+        }
+    }
+
+    /// Approve plan and save - called when user presses 'a' during approval.
+    fn approve_plan(&mut self, task_id: String, plan: Plan) {
+        // Auto-advance to Planning phase if still in Research phase
+        if let Some(ref task) = self.current_task {
+            if task.phase == arq_core::Phase::Research && task.research_doc.is_some() {
+                if let Err(e) = self.manager.advance_phase(&task_id) {
+                    self.chat_messages_mut().push(ChatMessage::system(format!(
+                        "Failed to advance to Planning phase: {}",
+                        e
+                    )));
+                    self.planning_state = PlanningState::AwaitingApproval {
+                        task_id,
+                        pending_plan: plan,
+                    };
+                    return;
+                }
+            }
+        }
+
+        match self.manager.set_plan(&task_id, plan.clone()) {
+            Ok(task) => {
+                self.current_task = Some(task);
+                self.status_message = Some("Plan saved to .arq/plan.yaml".to_string());
+                self.chat_messages_mut().push(ChatMessage::system(
+                    "Plan approved and saved. You can now proceed to Agent tab.",
+                ));
+                self.set_progress_status(3, ProgressStatus::Complete);
+                self.planning_state = PlanningState::Idle;
+            }
+            Err(e) => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Failed to save plan: {}",
+                    e
+                )));
+                // Restore state for retry
+                self.planning_state = PlanningState::AwaitingApproval {
+                    task_id,
+                    pending_plan: plan,
+                };
+            }
+        }
+    }
+
     /// Approve research and save - called when user presses 'a' during validation.
     fn approve_research(&mut self, task_id: String, doc: ResearchDoc) {
         match self.manager.set_research_doc(&task_id, doc.clone()) {
             Ok(task) => {
                 self.current_task = Some(task);
                 self.status_message = Some("Research saved to .arq/research-doc.md".to_string());
-                self.chat_messages.push(ChatMessage::system(
+                self.chat_messages_mut().push(ChatMessage::system(
                     "Research approved and saved. You can now proceed to Planner tab.",
                 ));
                 // Mark final progress item complete
                 self.set_progress_status(4, ProgressStatus::Complete);
             }
             Err(e) => {
-                self.chat_messages.push(ChatMessage::system(format!(
+                self.chat_messages_mut().push(ChatMessage::system(format!(
                     "Failed to save research: {}",
                     e
                 )));
@@ -528,6 +784,14 @@ impl App {
                 {
                     self.approve_research(task_id, pending_doc);
                 }
+                // Approve plan if awaiting approval
+                else if let PlanningState::AwaitingApproval {
+                    task_id,
+                    pending_plan,
+                } = std::mem::replace(&mut self.planning_state, PlanningState::Idle)
+                {
+                    self.approve_plan(task_id, pending_plan);
+                }
             }
             KeyCode::Char('m') => {
                 // Cycle through available models
@@ -563,7 +827,7 @@ impl App {
         }
 
         let input = std::mem::take(&mut self.input_buffer);
-        self.chat_messages.push(ChatMessage::user(&input));
+        self.chat_messages_mut().push(ChatMessage::user(&input));
 
         match self.selected_tab {
             SelectedTab::Researcher => {
@@ -589,11 +853,33 @@ impl App {
                 }
             }
             SelectedTab::Planner => {
-                self.chat_messages
-                    .push(ChatMessage::system("Planning phase not yet implemented."));
+                match &self.planning_state {
+                    PlanningState::Idle => {
+                        // Start generating approaches
+                        self.start_planning(event_tx);
+                    }
+                    PlanningState::AwaitingSelection { .. } => {
+                        // User typed a number (1, 2, 3) or custom approach
+                        if let Ok(idx) = input.parse::<usize>() {
+                            if idx > 0 {
+                                self.select_approach(idx - 1, event_tx);
+                            }
+                        } else {
+                            // Custom approach description - create custom approach
+                            self.create_custom_approach(input, event_tx);
+                        }
+                    }
+                    PlanningState::AwaitingApproval { .. } => {
+                        // User is providing refinement feedback
+                        self.refine_plan(input, event_tx);
+                    }
+                    PlanningState::GeneratingApproaches | PlanningState::GeneratingPlan { .. } => {
+                        // Already generating, ignore input
+                    }
+                }
             }
             SelectedTab::Agent => {
-                self.chat_messages
+                self.chat_messages_mut()
                     .push(ChatMessage::system("Agent phase not yet implemented."));
             }
         }
@@ -612,7 +898,7 @@ impl App {
         let task = match self.manager.create_task(&prompt) {
             Ok(task) => task,
             Err(e) => {
-                self.chat_messages
+                self.chat_messages_mut()
                     .push(ChatMessage::system(format!("Failed to create task: {}", e)));
                 self.is_streaming = false;
                 return;
@@ -629,7 +915,7 @@ impl App {
         let kg_db_path = config.knowledge.db_full_path(&config.storage);
 
         // Add message to show research is starting
-        self.chat_messages.push(ChatMessage::system(format!(
+        self.chat_messages_mut().push(ChatMessage::system(format!(
             "Researching: {} ...",
             task.prompt
         )));
@@ -696,6 +982,250 @@ impl App {
         });
     }
 
+    /// Start planning phase - generate approaches from research.
+    fn start_planning(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
+        // Get current task and research doc
+        let task = match &self.current_task {
+            Some(t) => t.clone(),
+            None => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No current task. Create a task first."));
+                return;
+            }
+        };
+
+        let research_doc = match &task.research_doc {
+            Some(doc) => doc.clone(),
+            None => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No research document. Complete research first."));
+                return;
+            }
+        };
+
+        self.is_streaming = true;
+        self.stream_buffer.clear();
+        self.reset_progress_items();
+        self.planning_state = PlanningState::GeneratingApproaches;
+        self.status_message = Some("Generating approaches...".to_string());
+
+        let task_id = task.id.clone();
+        let config = self.config.clone();
+
+        self.chat_messages_mut().push(ChatMessage::system(
+            "Generating implementation approaches based on your research...",
+        ));
+
+        // Spawn the planning task
+        tokio::spawn(async move {
+            match run_planning_approaches(research_doc, config, event_tx.clone()).await {
+                Ok(options) => {
+                    let _ = event_tx.send(Event::PlanningApproaches(ApproachesResult {
+                        task_id,
+                        options,
+                    }));
+                }
+                Err(error) => {
+                    let _ = event_tx.send(Event::PlanningFailed(error));
+                }
+            }
+        });
+    }
+
+    /// Select an approach and generate detailed plan.
+    fn select_approach(&mut self, index: usize, event_tx: mpsc::UnboundedSender<Event>) {
+        // Extract state values
+        let (task_id, approaches) = if let PlanningState::AwaitingSelection { task_id, approaches } =
+            std::mem::replace(&mut self.planning_state, PlanningState::Idle)
+        {
+            (task_id, approaches)
+        } else {
+            return;
+        };
+
+        // Get the selected approach
+        let approach = match approaches.get(index) {
+            Some(a) => a.clone(),
+            None => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Invalid selection. Please choose 1-{}.",
+                    approaches.len()
+                )));
+                // Restore state
+                self.planning_state = PlanningState::AwaitingSelection { task_id, approaches };
+                return;
+            }
+        };
+
+        // Get research doc from current task
+        let research_doc = match &self.current_task {
+            Some(t) => match &t.research_doc {
+                Some(doc) => doc.clone(),
+                None => {
+                    self.chat_messages_mut()
+                        .push(ChatMessage::system("Research document not found."));
+                    return;
+                }
+            },
+            None => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No current task."));
+                return;
+            }
+        };
+
+        self.is_streaming = true;
+        self.stream_buffer.clear();
+        self.planning_state = PlanningState::GeneratingPlan {
+            task_id: task_id.clone(),
+            selected_approach: approach.clone(),
+        };
+        self.status_message = Some("Generating detailed plan...".to_string());
+
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "Selected: {}. Generating detailed specification...",
+            approach.name
+        )));
+
+        let config = self.config.clone();
+
+        // Spawn the plan generation task
+        tokio::spawn(async move {
+            match run_planning_spec(research_doc, approach, config, event_tx.clone()).await {
+                Ok(plan) => {
+                    let _ = event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
+                }
+                Err(error) => {
+                    let _ = event_tx.send(Event::PlanningFailed(error));
+                }
+            }
+        });
+    }
+
+    /// Create a custom approach from user description.
+    fn create_custom_approach(&mut self, description: String, event_tx: mpsc::UnboundedSender<Event>) {
+        // Extract state values
+        let (task_id, _approaches) = if let PlanningState::AwaitingSelection { task_id, approaches } =
+            std::mem::replace(&mut self.planning_state, PlanningState::Idle)
+        {
+            (task_id, approaches)
+        } else {
+            return;
+        };
+
+        // Get research doc from current task
+        let research_doc = match &self.current_task {
+            Some(t) => match &t.research_doc {
+                Some(doc) => doc.clone(),
+                None => {
+                    self.chat_messages_mut()
+                        .push(ChatMessage::system("Research document not found."));
+                    return;
+                }
+            },
+            None => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No current task."));
+                return;
+            }
+        };
+
+        // Create a custom approach from user input
+        let approach = Approach::new("custom", "Custom Approach")
+            .with_description(&description)
+            .with_complexity(arq_core::planning::Complexity::Medium);
+
+        self.is_streaming = true;
+        self.stream_buffer.clear();
+        self.planning_state = PlanningState::GeneratingPlan {
+            task_id: task_id.clone(),
+            selected_approach: approach.clone(),
+        };
+        self.status_message = Some("Generating plan for custom approach...".to_string());
+
+        self.chat_messages_mut().push(ChatMessage::system(
+            "Generating plan for your custom approach...",
+        ));
+
+        let config = self.config.clone();
+
+        // Spawn the plan generation task
+        tokio::spawn(async move {
+            match run_planning_spec(research_doc, approach, config, event_tx.clone()).await {
+                Ok(plan) => {
+                    let _ = event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
+                }
+                Err(error) => {
+                    let _ = event_tx.send(Event::PlanningFailed(error));
+                }
+            }
+        });
+    }
+
+    /// Refine plan based on user feedback.
+    fn refine_plan(&mut self, feedback: String, event_tx: mpsc::UnboundedSender<Event>) {
+        // For now, regenerate plan with the feedback included in the prompt
+        // Extract state values
+        let (task_id, _pending_plan) = if let PlanningState::AwaitingApproval { task_id, pending_plan } =
+            std::mem::replace(&mut self.planning_state, PlanningState::Idle)
+        {
+            (task_id, pending_plan)
+        } else {
+            return;
+        };
+
+        // Get research doc from current task
+        let research_doc = match &self.current_task {
+            Some(t) => match &t.research_doc {
+                Some(doc) => doc.clone(),
+                None => {
+                    self.chat_messages_mut()
+                        .push(ChatMessage::system("Research document not found."));
+                    return;
+                }
+            },
+            None => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No current task."));
+                return;
+            }
+        };
+
+        // Create a refinement approach with the feedback
+        let approach = Approach::new("refinement", "Refined Approach")
+            .with_description(format!(
+                "Based on user feedback: {}\n\nPlease regenerate the plan addressing these concerns.",
+                feedback
+            ))
+            .with_complexity(arq_core::planning::Complexity::Medium);
+
+        self.is_streaming = true;
+        self.stream_buffer.clear();
+        self.planning_state = PlanningState::GeneratingPlan {
+            task_id: task_id.clone(),
+            selected_approach: approach.clone(),
+        };
+        self.status_message = Some("Refining plan...".to_string());
+
+        self.chat_messages_mut().push(ChatMessage::system(
+            "Regenerating plan based on your feedback...",
+        ));
+
+        let config = self.config.clone();
+
+        // Spawn the plan generation task
+        tokio::spawn(async move {
+            match run_planning_spec(research_doc, approach, config, event_tx.clone()).await {
+                Ok(plan) => {
+                    let _ = event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
+                }
+                Err(error) => {
+                    let _ = event_tx.send(Event::PlanningFailed(error));
+                }
+            }
+        });
+    }
+
     /// Check if we can switch to the given tab.
     /// Gates access: Planner requires saved research, Agent requires saved plan.
     fn can_switch_to_tab(&mut self, tab: &SelectedTab) -> bool {
@@ -732,12 +1262,14 @@ impl App {
 
     /// Scroll chat up.
     fn scroll_up(&mut self) {
-        self.scroll_offset = self.scroll_offset.saturating_add(1);
+        let offset = self.scroll_offset().saturating_add(1);
+        self.set_scroll_offset(offset);
     }
 
     /// Scroll chat down.
     fn scroll_down(&mut self) {
-        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+        let offset = self.scroll_offset().saturating_sub(1);
+        self.set_scroll_offset(offset);
     }
 
     /// Cycle through available models.
@@ -766,6 +1298,34 @@ impl App {
     /// Get the current model name for display.
     pub fn current_model(&self) -> String {
         self.config.llm.model_or_default()
+    }
+
+    /// Get chat messages for the current tab.
+    pub fn chat_messages(&self) -> &Vec<ChatMessage> {
+        match self.selected_tab {
+            SelectedTab::Researcher => &self.researcher_messages,
+            SelectedTab::Planner => &self.planner_messages,
+            SelectedTab::Agent => &self.agent_messages,
+        }
+    }
+
+    /// Get mutable chat messages for the current tab.
+    pub fn chat_messages_mut(&mut self) -> &mut Vec<ChatMessage> {
+        match self.selected_tab {
+            SelectedTab::Researcher => &mut self.researcher_messages,
+            SelectedTab::Planner => &mut self.planner_messages,
+            SelectedTab::Agent => &mut self.agent_messages,
+        }
+    }
+
+    /// Get scroll offset for the current tab.
+    pub fn scroll_offset(&self) -> usize {
+        self.scroll_offsets[self.selected_tab.index()]
+    }
+
+    /// Set scroll offset for the current tab.
+    pub fn set_scroll_offset(&mut self, offset: usize) {
+        self.scroll_offsets[self.selected_tab.index()] = offset;
     }
 }
 
@@ -899,4 +1459,117 @@ async fn run_research_task(
     };
 
     Ok(doc)
+}
+
+/// Run planning approaches generation.
+/// Returns ApproachOptions for user selection.
+async fn run_planning_approaches(
+    research_doc: ResearchDoc,
+    config: Config,
+    event_tx: mpsc::UnboundedSender<Event>,
+) -> Result<ApproachOptions, String> {
+    use arq_core::{ClaudeClient, OpenAIClient, PlanningProgress as CorePlanningProgress};
+
+    // Send progress events
+    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::Started));
+    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::LoadingResearch));
+
+    let provider = config.llm.provider.as_str();
+    let model = config.llm.model_or_default();
+
+    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::GeneratingApproaches));
+
+    let options = match provider {
+        "anthropic" | "claude" => {
+            let api_key = config
+                .llm
+                .api_key_or_env()
+                .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
+            let client = ClaudeClient::new(api_key).with_model(&model);
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_approaches(&research_doc)
+                .await
+                .map_err(|e| format!("Planning failed: {}", e))?
+        }
+        "ollama" => {
+            let base_url = config.llm.base_url_or_default();
+            let client = OpenAIClient::new(&base_url, "", &model);
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_approaches(&research_doc)
+                .await
+                .map_err(|e| format!("Planning failed: {}", e))?
+        }
+        _ => {
+            let base_url = config.llm.base_url_or_default();
+            let api_key = config.llm.api_key_or_env().unwrap_or_default();
+            let client = OpenAIClient::new(&base_url, &api_key, &model);
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_approaches(&research_doc)
+                .await
+                .map_err(|e| format!("Planning failed: {}", e))?
+        }
+    };
+
+    let count = options.len();
+    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::ApproachesReady(count)));
+
+    Ok(options)
+}
+
+/// Run plan specification generation from a selected approach.
+/// Returns Plan for user approval.
+async fn run_planning_spec(
+    research_doc: ResearchDoc,
+    approach: Approach,
+    config: Config,
+    event_tx: mpsc::UnboundedSender<Event>,
+) -> Result<Plan, String> {
+    use arq_core::{ClaudeClient, OpenAIClient, PlanningProgress as CorePlanningProgress};
+
+    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::GeneratingSpec));
+
+    let provider = config.llm.provider.as_str();
+    let model = config.llm.model_or_default();
+
+    let plan = match provider {
+        "anthropic" | "claude" => {
+            let api_key = config
+                .llm
+                .api_key_or_env()
+                .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
+            let client = ClaudeClient::new(api_key).with_model(&model);
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_plan(&research_doc, &approach)
+                .await
+                .map_err(|e| format!("Plan generation failed: {}", e))?
+        }
+        "ollama" => {
+            let base_url = config.llm.base_url_or_default();
+            let client = OpenAIClient::new(&base_url, "", &model);
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_plan(&research_doc, &approach)
+                .await
+                .map_err(|e| format!("Plan generation failed: {}", e))?
+        }
+        _ => {
+            let base_url = config.llm.base_url_or_default();
+            let api_key = config.llm.api_key_or_env().unwrap_or_default();
+            let client = OpenAIClient::new(&base_url, &api_key, &model);
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_plan(&research_doc, &approach)
+                .await
+                .map_err(|e| format!("Plan generation failed: {}", e))?
+        }
+    };
+
+    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::CheckingComplexity));
+    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::Complete));
+
+    Ok(plan)
 }

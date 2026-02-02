@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Planning Phase (TUI)**: Full implementation of the second phase in the Researcher → Planner → Agent workflow
+  - Generate 2-3 implementation approaches with trade-offs from research findings
+  - Select an approach or describe a custom one
+  - Generate detailed implementation specification (plan.yaml)
+  - Approve or refine the generated plan
+- **`arq tui --continue`**: Restore previous session state when reopening TUI
+- **Per-tab chat history**: Each tab (Researcher, Planner, Agent) maintains its own messages and scroll position
+- **Planning progress indicators**: Visual feedback during approach generation and plan creation
+
+### Changed
+
+- Improved LLM error handling with better messages for empty responses
+- Planning prompts now include inline JSON format instructions for better provider compatibility
+- Auto-advance task phase when saving plan (Research → Planning)
+
+### Fixed
+
+- "Wrong phase: expected Planning, got Research" error when saving plans
+- Tab state isolation - switching tabs no longer shows wrong content
+- Progress indicators now properly update to complete state
+
 ## [0.2.1] - 2025-01-31
 
 ### Added
