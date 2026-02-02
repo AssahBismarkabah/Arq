@@ -2,19 +2,16 @@
   <img src="assets/Arq.png" alt="Arq">
 </p>
 
-<p align="center">
-  <strong>Spec-first AI coding agent with deep codebase understanding</strong>
-</p>
 
-<p align="center">
-  <a href="https://github.com/AssahBismarkabah/Arq/releases"><img src="https://img.shields.io/github/v/release/AssahBismarkabah/Arq?label=release" alt="Release"></a>
-  <a href="https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml"><img src="https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/AssahBismarkabah/Arq/stargazers"><img src="https://img.shields.io/github/stars/AssahBismarkabah/Arq?style=flat" alt="Stars"></a>
-  <a href="https://github.com/AssahBismarkabah/Arq/commits"><img src="https://img.shields.io/github/commit-activity/m/AssahBismarkabah/Arq" alt="Commits"></a>
-  <img src="https://img.shields.io/github/languages/top/AssahBismarkabah/Arq" alt="Language">
-  <img src="https://img.shields.io/github/repo-size/AssahBismarkabah/Arq" alt="Repo Size">
-</p>
+# Spec-first AI coding agent with deep codebase understanding
+
+[![Release](https://img.shields.io/github/v/release/AssahBismarkabah/Arq?label=release)](https://github.com/AssahBismarkabah/Arq/releases)
+[![CI](https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml/badge.svg)](https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/AssahBismarkabah/Arq?style=flat)](https://github.com/AssahBismarkabah/Arq/stargazers)
+[![Commits](https://img.shields.io/github/commit-activity/m/AssahBismarkabah/Arq)](https://github.com/AssahBismarkabah/Arq/commits)
+![Language](https://img.shields.io/github/languages/top/AssahBismarkabah/Arq)
+![Repo Size](https://img.shields.io/github/repo-size/AssahBismarkabah/Arq)
 
 
 Arq builds a **Knowledge Graph** of your codebase, enabling it to reason about architectural patterns, dependencies, and cross-file impacts before writing code. Unlike traditional AI tools that rely on simple RAG, Arq ensures technically sound decisions through a disciplined three-phase workflow.
