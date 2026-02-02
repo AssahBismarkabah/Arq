@@ -225,7 +225,7 @@ impl ChangeApplier {
             let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
             let backup_name = format!(
                 "{}_{}.bak",
-                rel_path.replace('/', "_").replace('\\', "_"),
+                rel_path.replace(['/', '\\'], "_"),
                 timestamp
             );
             let backup_file = backup_dir.join(&backup_name);
@@ -285,7 +285,7 @@ impl ChangeApplier {
             let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
             let backup_name = format!(
                 "{}_{}.bak",
-                rel_path.replace('/', "_").replace('\\', "_"),
+                rel_path.replace(['/', '\\'], "_"),
                 timestamp
             );
             let backup_file = backup_dir.join(&backup_name);
