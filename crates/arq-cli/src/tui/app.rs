@@ -767,10 +767,22 @@ impl App {
                 self.input_mode = InputMode::Editing;
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                self.scroll_down();
+                self.scroll_down(3);
             }
             KeyCode::Char('k') | KeyCode::Up => {
-                self.scroll_up();
+                self.scroll_up(3);
+            }
+            KeyCode::PageDown | KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll_down(15);
+            }
+            KeyCode::PageUp | KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll_up(15);
+            }
+            KeyCode::Home | KeyCode::Char('g') => {
+                self.scroll_to_top();
+            }
+            KeyCode::End | KeyCode::Char('G') => {
+                self.scroll_to_bottom();
             }
             KeyCode::Char('a') => {
                 // Approve research if awaiting validation
@@ -1277,16 +1289,26 @@ impl App {
         }
     }
 
-    /// Scroll chat up.
-    fn scroll_up(&mut self) {
-        let offset = self.scroll_offset().saturating_add(1);
+    /// Scroll chat up by n lines.
+    fn scroll_up(&mut self, n: usize) {
+        let offset = self.scroll_offset().saturating_add(n);
         self.set_scroll_offset(offset);
     }
 
-    /// Scroll chat down.
-    fn scroll_down(&mut self) {
-        let offset = self.scroll_offset().saturating_sub(1);
+    /// Scroll chat down by n lines.
+    fn scroll_down(&mut self, n: usize) {
+        let offset = self.scroll_offset().saturating_sub(n);
         self.set_scroll_offset(offset);
+    }
+
+    /// Scroll to top of chat.
+    fn scroll_to_top(&mut self) {
+        self.set_scroll_offset(usize::MAX / 2); // Large value, will be clamped in render
+    }
+
+    /// Scroll to bottom of chat (most recent).
+    fn scroll_to_bottom(&mut self) {
+        self.set_scroll_offset(0);
     }
 
     /// Cycle through available models.

@@ -62,7 +62,7 @@ fn render_status_bar(app: &App, frame: &mut Frame, area: Rect) {
             "Researching...  [q] Quit"
         }
         (InputMode::Normal, ResearchState::Idle) => {
-            "[i] Edit  [m] Model  [Tab] Switch  [j/k] Scroll  [q] Quit"
+            "[i] Edit  [m] Model  [Tab] Switch  [j/k] Scroll  [g/G] Top/Bottom  [q] Quit"
         }
     };
 

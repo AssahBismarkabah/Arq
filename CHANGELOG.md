@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved LLM error handling with better messages for empty responses
 - Planning prompts now include inline JSON format instructions for better provider compatibility
 - Auto-advance task phase when saving plan (Research → Planning)
+- **Faster scrolling**: j/k now scroll 3 lines, added Page Up/Down (Ctrl+u/d), Home/End (g/G) for navigation
 
 ### Fixed
 
