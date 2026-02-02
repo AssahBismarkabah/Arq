@@ -26,14 +26,25 @@ pub struct FastEmbedder {
 }
 
 impl FastEmbedder {
-    /// Create a new FastEmbed embedder with the default model.
+    /// Create a new FastEmbed embedder with the default model (BGESmallENV15).
     /// Uses `~/.arq/cache/` as the model cache directory.
     pub fn new() -> Result<Self, KnowledgeError> {
         let cache_dir = Self::default_cache_dir();
         Self::with_model_and_cache(EmbeddingModel::BGESmallENV15, cache_dir)
     }
 
-    /// Create a new FastEmbed embedder with a specific model.
+    /// Create a new FastEmbed embedder from a model name string.
+    /// The model name should be the model code (e.g., "Xenova/bge-small-en-v1.5").
+    /// Uses `~/.arq/cache/` as the model cache directory.
+    pub fn from_model_name(model_name: &str) -> Result<Self, KnowledgeError> {
+        let model: EmbeddingModel = model_name.parse().map_err(|e: String| {
+            KnowledgeError::Embedding(format!("Invalid embedding model '{}': {}", model_name, e))
+        })?;
+        let cache_dir = Self::default_cache_dir();
+        Self::with_model_and_cache(model, cache_dir)
+    }
+
+    /// Create a new FastEmbed embedder with a specific model enum.
     /// Uses `~/.arq/cache/` as the model cache directory.
     #[allow(dead_code)]
     pub fn with_model(model: EmbeddingModel) -> Result<Self, KnowledgeError> {

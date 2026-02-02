@@ -353,48 +353,41 @@ impl StorageConfig {
 }
 
 /// Research phase configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ResearchConfig {
     /// System prompt for research phase.
     /// If not set, uses the built-in default.
     pub system_prompt: Option<String>,
-
-    /// Maximum length of error context in messages.
-    pub error_context_length: usize,
-}
-
-impl Default for ResearchConfig {
-    fn default() -> Self {
-        Self {
-            system_prompt: None, // Use built-in default
-            error_context_length: DEFAULT_ERROR_CONTEXT_LENGTH,
-        }
-    }
 }
 
 /// Knowledge graph configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct KnowledgeConfig {
-    /// Database path relative to data_dir (default: "knowledge.db").
+    /// Database path relative to project directory (default: "knowledge.db").
     pub db_path: String,
 
-    /// Embedding model name (default: "BGESmallENV15").
+    /// Embedding model for semantic search.
+    /// Use the model code from fastembed (e.g., "Xenova/bge-small-en-v1.5").
+    /// See README for full list of supported models.
+    /// Default: "Xenova/bge-small-en-v1.5" (BGESmallENV15)
     pub embedding_model: String,
 
-    /// Maximum chunk size in characters (default: 1000).
+    /// Maximum chunk size in characters for indexing (default: 1000).
+    /// Larger chunks provide more context but reduce search precision.
     pub max_chunk_size: usize,
 
     /// Chunk overlap in characters (default: 100).
+    /// Overlap helps maintain context across chunk boundaries.
     pub chunk_overlap: usize,
 
-    /// Default search result limit (default: 20).
+    /// Maximum number of search results to return (default: 20).
     pub search_limit: usize,
-
-    /// File extensions to index (uses context.include_extensions if empty).
-    pub extensions: Vec<String>,
 }
+
+/// Default embedding model code (BGESmallENV15).
+pub const DEFAULT_EMBEDDING_MODEL: &str = "Xenova/bge-small-en-v1.5";
 
 impl Default for KnowledgeConfig {
     fn default() -> Self {
@@ -404,7 +397,6 @@ impl Default for KnowledgeConfig {
             max_chunk_size: DEFAULT_CHUNK_SIZE,
             chunk_overlap: DEFAULT_CHUNK_OVERLAP,
             search_limit: DEFAULT_SEARCH_LIMIT,
-            extensions: Vec::new(), // Use context.include_extensions by default
         }
     }
 }

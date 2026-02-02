@@ -158,7 +158,8 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
 pub const DEFAULT_LLM_PROVIDER: &str = "openai";
 
 /// Default max tokens for LLM responses.
-pub const DEFAULT_MAX_TOKENS: u32 = 4096;
+/// Set higher for code generation which can produce long outputs.
+pub const DEFAULT_MAX_TOKENS: u32 = 8192;
 
 // OpenAI defaults
 /// Default OpenAI API URL.
@@ -210,9 +211,6 @@ pub const DEFAULT_CURRENT_FILE: &str = "current";
 // Research Defaults
 // ============================================================================
 
-/// Default error context length in error messages.
-pub const DEFAULT_ERROR_CONTEXT_LENGTH: usize = 500;
-
 /// Default word limit for task name derivation.
 pub const DEFAULT_TASK_NAME_WORDS: usize = 5;
 
@@ -222,9 +220,6 @@ pub const DEFAULT_TASK_NAME_WORDS: usize = 5;
 
 /// Default knowledge database path (relative to data_dir).
 pub const DEFAULT_KNOWLEDGE_DB_PATH: &str = "knowledge.db";
-
-/// Default embedding model name.
-pub const DEFAULT_EMBEDDING_MODEL: &str = "BGESmallENV15";
 
 /// Default maximum chunk size in characters.
 pub const DEFAULT_CHUNK_SIZE: usize = 1000;

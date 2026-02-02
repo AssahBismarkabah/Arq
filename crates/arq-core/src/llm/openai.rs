@@ -170,7 +170,7 @@ impl OpenAIClient {
             .choices
             .into_iter()
             .next()
-            .map(|c| c.message.content);
+            .map(|c| c.message.get_content());
 
         match content {
             Some(text) if !text.is_empty() => Ok(text),
@@ -326,9 +326,25 @@ struct ChatMessage {
     role: String,
     #[serde(default)]
     content: String,
+    /// Some providers (like Gemini) put content in reasoning_content
+    #[serde(default)]
+    reasoning_content: Option<String>,
     // Some providers include extra fields like thinking_blocks
     #[serde(flatten, default)]
     _extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+impl ChatMessage {
+    /// Get the actual content, trying content first, then reasoning_content
+    fn get_content(&self) -> String {
+        if !self.content.is_empty() {
+            self.content.clone()
+        } else if let Some(ref reasoning) = self.reasoning_content {
+            reasoning.clone()
+        } else {
+            String::new()
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

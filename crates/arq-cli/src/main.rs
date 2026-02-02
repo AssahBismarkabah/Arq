@@ -273,11 +273,20 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let db_path = config.knowledge.db_full_path(&config.storage);
             let runner = if db_path.exists() {
                 println!("Using knowledge graph for smart context...");
-                let kg = KnowledgeGraph::open(&db_path).await?;
+                let kg =
+                    KnowledgeGraph::open_with_model(&db_path, &config.knowledge.embedding_model)
+                        .await?;
                 ResearchRunner::with_knowledge_store(llm, context_builder, std::sync::Arc::new(kg))
             } else {
                 println!("Scanning codebase (run 'arq init' for faster semantic search)...");
                 ResearchRunner::new(llm, context_builder)
+            };
+            // Apply config settings
+            let runner = runner.with_search_limit(config.knowledge.search_limit);
+            let runner = if let Some(ref prompt) = config.research.system_prompt {
+                runner.with_system_prompt(prompt)
+            } else {
+                runner
             };
 
             // Run research
@@ -354,9 +363,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap(),
             );
             spinner.enable_steady_tick(std::time::Duration::from_millis(100));
-            spinner.set_message("Loading embedding model (first run downloads ~50MB)...");
+            spinner.set_message(format!(
+                "Loading embedding model '{}' (first run downloads ~50MB)...",
+                config.knowledge.embedding_model
+            ));
 
-            let kg = KnowledgeGraph::open(&db_path).await?;
+            let kg = KnowledgeGraph::open_with_model(&db_path, &config.knowledge.embedding_model)
+                .await?;
             kg.initialize().await?;
             spinner.finish_with_message("Embedding model loaded");
 
@@ -384,16 +397,21 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
 
             let stats: IndexStats = kg
-                .index_directory_with_progress(Path::new("."), |progress: IndexProgress| {
-                    pb.set_position(progress.files_done as u64);
-                    // Show just the filename, not full path
-                    let filename = progress
-                        .current_file
-                        .rsplit('/')
-                        .next()
-                        .unwrap_or(&progress.current_file);
-                    pb.set_message(filename.to_string());
-                })
+                .index_directory_with_config(
+                    Path::new("."),
+                    Some(config.knowledge.max_chunk_size),
+                    Some(config.knowledge.chunk_overlap),
+                    |progress: IndexProgress| {
+                        pb.set_position(progress.files_done as u64);
+                        // Show just the filename, not full path
+                        let filename = progress
+                            .current_file
+                            .rsplit('/')
+                            .next()
+                            .unwrap_or(&progress.current_file);
+                        pb.set_message(filename.to_string());
+                    },
+                )
                 .await?;
             pb.finish_with_message("Complete");
 
@@ -410,7 +428,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 return Err("Knowledge graph not initialized. Run 'arq init' first.".into());
             }
 
-            let kg = KnowledgeGraph::open(&db_path).await?;
+            let kg = KnowledgeGraph::open_with_model(&db_path, &config.knowledge.embedding_model)
+                .await?;
 
             let query_str = query.join(" ");
             println!("Searching for: {}\n", query_str);
@@ -448,7 +467,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
 
-            let kg = KnowledgeGraph::open(&db_path).await?;
+            let kg = KnowledgeGraph::open_with_model(&db_path, &config.knowledge.embedding_model)
+                .await?;
             let stats = kg.get_extended_stats().await?;
 
             println!("Knowledge Graph Status\n");
@@ -487,7 +507,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 return Err("Knowledge graph not initialized. Run 'arq init' first.".into());
             }
 
-            let kg = KnowledgeGraph::open(&db_path).await?;
+            let kg = KnowledgeGraph::open_with_model(&db_path, &config.knowledge.embedding_model)
+                .await?;
 
             match action {
                 GraphAction::Deps { name } => {

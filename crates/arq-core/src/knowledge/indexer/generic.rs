@@ -30,10 +30,14 @@ pub struct GenericIndexer {
     extensions: Vec<String>,
     /// Whether to use rich ontology parsing (vs legacy regex).
     use_rich_parsing: bool,
+    /// Maximum chunk size in characters.
+    max_chunk_size: usize,
+    /// Chunk overlap in characters.
+    chunk_overlap: usize,
 }
 
 impl GenericIndexer {
-    /// Create a new generic indexer with default extensions.
+    /// Create a new generic indexer with default settings.
     pub fn new(db: Arc<KnowledgeDb>, embedder: Arc<dyn Embedder>) -> Self {
         Self {
             db,
@@ -41,6 +45,8 @@ impl GenericIndexer {
             parser_registry: ParserRegistry::new(),
             extensions: DEFAULT_EXTENSIONS.iter().map(|s| s.to_string()).collect(),
             use_rich_parsing: true,
+            max_chunk_size: MAX_CHUNK_SIZE,
+            chunk_overlap: CHUNK_OVERLAP,
         }
     }
 
@@ -56,6 +62,8 @@ impl GenericIndexer {
             parser_registry: ParserRegistry::new(),
             extensions,
             use_rich_parsing: true,
+            max_chunk_size: MAX_CHUNK_SIZE,
+            chunk_overlap: CHUNK_OVERLAP,
         }
     }
 
@@ -67,7 +75,16 @@ impl GenericIndexer {
             parser_registry: ParserRegistry::new(),
             extensions: DEFAULT_EXTENSIONS.iter().map(|s| s.to_string()).collect(),
             use_rich_parsing: false,
+            max_chunk_size: MAX_CHUNK_SIZE,
+            chunk_overlap: CHUNK_OVERLAP,
         }
+    }
+
+    /// Set chunk size configuration.
+    pub fn with_chunk_config(mut self, max_chunk_size: usize, chunk_overlap: usize) -> Self {
+        self.max_chunk_size = max_chunk_size;
+        self.chunk_overlap = chunk_overlap;
+        self
     }
 
     /// Check if file extension is in the allowed list.
@@ -86,7 +103,7 @@ impl GenericIndexer {
     }
 
     /// Split content into overlapping chunks for embedding.
-    fn chunk_content(content: &str, file_path: &str) -> Vec<CodeChunk> {
+    fn chunk_content(&self, content: &str, file_path: &str) -> Vec<CodeChunk> {
         let mut chunks = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
 
@@ -102,7 +119,7 @@ impl GenericIndexer {
             current_chunk.push_str(line);
             current_chunk.push('\n');
 
-            if current_chunk.len() >= MAX_CHUNK_SIZE {
+            if current_chunk.len() >= self.max_chunk_size {
                 chunks.push(CodeChunk::new(
                     file_path,
                     current_chunk.trim(),
@@ -111,7 +128,7 @@ impl GenericIndexer {
                 ));
 
                 // Start new chunk with overlap
-                let overlap_lines = (CHUNK_OVERLAP / 40) as u32;
+                let overlap_lines = (self.chunk_overlap / 40) as u32;
                 let overlap_start = current_line.saturating_sub(overlap_lines);
                 current_chunk = lines
                     .iter()
@@ -247,7 +264,7 @@ impl GenericIndexer {
 
     /// Generate and store embeddings for code chunks.
     async fn index_embeddings(&self, path: &str, content: &str) -> Result<(), KnowledgeError> {
-        let mut chunks = Self::chunk_content(content, path);
+        let mut chunks = self.chunk_content(content, path);
 
         if chunks.is_empty() {
             return Ok(());

@@ -2087,7 +2087,8 @@ async fn run_research_task(
 
     // Try to initialize knowledge graph for semantic search
     let knowledge_store: Option<Arc<dyn KnowledgeStore>> =
-        match KnowledgeGraph::open(&kg_db_path).await {
+        match KnowledgeGraph::open_with_model(&kg_db_path, &config.knowledge.embedding_model).await
+        {
             Ok(kg) => {
                 // Check if initialized, if not initialize and index
                 let kg = Arc::new(kg);
@@ -2100,7 +2101,15 @@ async fn run_research_task(
                         let _ = event_tx.send(Event::ResearchProgress(
                             ResearchProgress::SearchingKnowledgeGraph,
                         ));
-                        if let Err(e) = kg.index_directory(&cwd).await {
+                        if let Err(e) = kg
+                            .index_directory_with_config(
+                                &cwd,
+                                Some(config.knowledge.max_chunk_size),
+                                Some(config.knowledge.chunk_overlap),
+                                |_| {},
+                            )
+                            .await
+                        {
                             eprintln!("Failed to index codebase: {}", e);
                         }
                         Some(kg as Arc<dyn KnowledgeStore>)
@@ -2143,11 +2152,16 @@ async fn run_research_task(
     // (ResearchRunner is generic, so we handle each provider type separately)
     let provider = config.llm.provider.as_str();
     let model = config.llm.model_or_default();
+    let max_tokens = config.llm.max_tokens;
+
+    // Research config
+    let custom_system_prompt = config.research.system_prompt.clone();
+    let search_limit = config.knowledge.search_limit;
 
     // Helper macro to create runner with or without knowledge store
     macro_rules! create_runner {
-        ($client:expr) => {
-            if let Some(ref kg) = knowledge_store {
+        ($client:expr) => {{
+            let runner = if let Some(ref kg) = knowledge_store {
                 ResearchRunner::with_knowledge_store(
                     $client,
                     context_builder.clone(),
@@ -2155,8 +2169,15 @@ async fn run_research_task(
                 )
             } else {
                 ResearchRunner::new($client, context_builder.clone())
+            };
+            // Apply config settings
+            let runner = runner.with_search_limit(search_limit);
+            if let Some(ref prompt) = custom_system_prompt {
+                runner.with_system_prompt(prompt)
+            } else {
+                runner
             }
-        };
+        }};
     }
 
     let doc = match provider {
@@ -2165,7 +2186,12 @@ async fn run_research_task(
                 .llm
                 .api_key_or_env()
                 .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
-            let client = ClaudeClient::new(api_key).with_model(&model);
+            let mut client = ClaudeClient::new(api_key)
+                .with_model(&model)
+                .with_max_tokens(max_tokens);
+            if let Some(ref version) = config.llm.api_version {
+                client = client.with_api_version(version);
+            }
             let runner = create_runner!(client);
             runner
                 .run_streaming(&task, progress_tx, stream_tx)
@@ -2174,7 +2200,7 @@ async fn run_research_task(
         }
         "ollama" => {
             let base_url = config.llm.base_url_or_default();
-            let client = OpenAIClient::new(&base_url, "", &model);
+            let client = OpenAIClient::new(&base_url, "", &model).with_max_tokens(max_tokens);
             let runner = create_runner!(client);
             runner
                 .run_streaming(&task, progress_tx, stream_tx)
@@ -2185,7 +2211,7 @@ async fn run_research_task(
             // OpenAI or OpenAI-compatible (use non-streaming for compatibility)
             let base_url = config.llm.base_url_or_default();
             let api_key = config.llm.api_key_or_env().unwrap_or_default();
-            let client = OpenAIClient::new(&base_url, &api_key, &model);
+            let client = OpenAIClient::new(&base_url, &api_key, &model).with_max_tokens(max_tokens);
             let runner = create_runner!(client);
             // Use non-streaming for better compatibility with various providers
             let doc = runner
@@ -2218,6 +2244,7 @@ async fn run_planning_approaches(
 
     let provider = config.llm.provider.as_str();
     let model = config.llm.model_or_default();
+    let max_tokens = config.llm.max_tokens;
 
     let _ = event_tx.send(Event::PlanningProgress(
         CorePlanningProgress::GeneratingApproaches,
@@ -2229,7 +2256,12 @@ async fn run_planning_approaches(
                 .llm
                 .api_key_or_env()
                 .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
-            let client = ClaudeClient::new(api_key).with_model(&model);
+            let mut client = ClaudeClient::new(api_key)
+                .with_model(&model)
+                .with_max_tokens(max_tokens);
+            if let Some(ref version) = config.llm.api_version {
+                client = client.with_api_version(version);
+            }
             let runner = PlanningRunner::new(client);
             runner
                 .generate_approaches(&research_doc)
@@ -2238,7 +2270,7 @@ async fn run_planning_approaches(
         }
         "ollama" => {
             let base_url = config.llm.base_url_or_default();
-            let client = OpenAIClient::new(&base_url, "", &model);
+            let client = OpenAIClient::new(&base_url, "", &model).with_max_tokens(max_tokens);
             let runner = PlanningRunner::new(client);
             runner
                 .generate_approaches(&research_doc)
@@ -2248,7 +2280,7 @@ async fn run_planning_approaches(
         _ => {
             let base_url = config.llm.base_url_or_default();
             let api_key = config.llm.api_key_or_env().unwrap_or_default();
-            let client = OpenAIClient::new(&base_url, &api_key, &model);
+            let client = OpenAIClient::new(&base_url, &api_key, &model).with_max_tokens(max_tokens);
             let runner = PlanningRunner::new(client);
             runner
                 .generate_approaches(&research_doc)
@@ -2281,6 +2313,7 @@ async fn run_planning_spec(
 
     let provider = config.llm.provider.as_str();
     let model = config.llm.model_or_default();
+    let max_tokens = config.llm.max_tokens;
 
     let plan = match provider {
         "anthropic" | "claude" => {
@@ -2288,7 +2321,12 @@ async fn run_planning_spec(
                 .llm
                 .api_key_or_env()
                 .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
-            let client = ClaudeClient::new(api_key).with_model(&model);
+            let mut client = ClaudeClient::new(api_key)
+                .with_model(&model)
+                .with_max_tokens(max_tokens);
+            if let Some(ref version) = config.llm.api_version {
+                client = client.with_api_version(version);
+            }
             let runner = PlanningRunner::new(client);
             runner
                 .generate_plan(&research_doc, &approach)
@@ -2297,7 +2335,7 @@ async fn run_planning_spec(
         }
         "ollama" => {
             let base_url = config.llm.base_url_or_default();
-            let client = OpenAIClient::new(&base_url, "", &model);
+            let client = OpenAIClient::new(&base_url, "", &model).with_max_tokens(max_tokens);
             let runner = PlanningRunner::new(client);
             runner
                 .generate_plan(&research_doc, &approach)
@@ -2307,7 +2345,7 @@ async fn run_planning_spec(
         _ => {
             let base_url = config.llm.base_url_or_default();
             let api_key = config.llm.api_key_or_env().unwrap_or_default();
-            let client = OpenAIClient::new(&base_url, &api_key, &model);
+            let client = OpenAIClient::new(&base_url, &api_key, &model).with_max_tokens(max_tokens);
             let runner = PlanningRunner::new(client);
             runner
                 .generate_plan(&research_doc, &approach)
@@ -2360,6 +2398,7 @@ async fn run_single_agent_item(
 
     let provider = config.llm.provider.as_str();
     let model = config.llm.model_or_default();
+    let max_tokens = config.llm.max_tokens;
     let cwd =
         std::env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
 
@@ -2370,16 +2409,22 @@ async fn run_single_agent_item(
                 .llm
                 .api_key_or_env()
                 .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
-            Box::new(ClaudeClient::new(api_key).with_model(&model))
+            let mut client = ClaudeClient::new(api_key)
+                .with_model(&model)
+                .with_max_tokens(max_tokens);
+            if let Some(ref version) = config.llm.api_version {
+                client = client.with_api_version(version);
+            }
+            Box::new(client)
         }
         "ollama" => {
             let base_url = config.llm.base_url_or_default();
-            Box::new(OpenAIClient::new(&base_url, "", &model))
+            Box::new(OpenAIClient::new(&base_url, "", &model).with_max_tokens(max_tokens))
         }
         _ => {
             let base_url = config.llm.base_url_or_default();
             let api_key = config.llm.api_key_or_env().unwrap_or_default();
-            Box::new(OpenAIClient::new(&base_url, &api_key, &model))
+            Box::new(OpenAIClient::new(&base_url, &api_key, &model).with_max_tokens(max_tokens))
         }
     };
 

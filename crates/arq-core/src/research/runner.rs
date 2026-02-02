@@ -6,7 +6,7 @@ use crate::context::{ContextBuilder, ContextError};
 use crate::knowledge::{KnowledgeError, KnowledgeStore, SearchResult};
 use crate::llm::{LLMError, StreamChunk, LLM};
 use crate::research::document::{Dependency, Finding, ResearchDoc, Source, SourceType};
-use crate::research::prompts::{build_research_prompt, RESEARCH_SYSTEM_PROMPT};
+use crate::research::prompts::{build_research_prompt, get_research_system_prompt};
 use crate::Task;
 
 /// Progress events during research.
@@ -30,11 +30,18 @@ pub enum ResearchProgress {
     Error(String),
 }
 
+/// Default search limit when not configured.
+const DEFAULT_SEARCH_LIMIT: usize = 15;
+
 /// Runs the research phase for a task.
 pub struct ResearchRunner<L: LLM> {
     llm: L,
     context_builder: ContextBuilder,
     knowledge_store: Option<Arc<dyn KnowledgeStore>>,
+    /// Custom system prompt. If None, uses the default.
+    custom_system_prompt: Option<String>,
+    /// Maximum number of search results to use.
+    search_limit: usize,
 }
 
 impl<L: LLM> ResearchRunner<L> {
@@ -44,6 +51,8 @@ impl<L: LLM> ResearchRunner<L> {
             llm,
             context_builder,
             knowledge_store: None,
+            custom_system_prompt: None,
+            search_limit: DEFAULT_SEARCH_LIMIT,
         }
     }
 
@@ -57,7 +66,26 @@ impl<L: LLM> ResearchRunner<L> {
             llm,
             context_builder,
             knowledge_store: Some(knowledge_store),
+            custom_system_prompt: None,
+            search_limit: DEFAULT_SEARCH_LIMIT,
         }
+    }
+
+    /// Sets a custom system prompt for research.
+    pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.custom_system_prompt = Some(prompt.into());
+        self
+    }
+
+    /// Sets the search result limit for knowledge graph queries.
+    pub fn with_search_limit(mut self, limit: usize) -> Self {
+        self.search_limit = limit;
+        self
+    }
+
+    /// Gets the system prompt to use (custom or default).
+    fn system_prompt(&self) -> &str {
+        get_research_system_prompt(self.custom_system_prompt.as_deref())
     }
 
     /// Runs research for the given task.
@@ -84,7 +112,7 @@ impl<L: LLM> ResearchRunner<L> {
         // 3. Call LLM
         let response = self
             .llm
-            .complete_with_system(RESEARCH_SYSTEM_PROMPT, &prompt)
+            .complete_with_system(self.system_prompt(), &prompt)
             .await?;
 
         // 4. Parse response into ResearchDoc
@@ -132,7 +160,7 @@ impl<L: LLM> ResearchRunner<L> {
         let _ = progress_tx.send(ResearchProgress::CallingLLM);
         let response = self
             .llm
-            .complete_with_system(RESEARCH_SYSTEM_PROMPT, &prompt)
+            .complete_with_system(self.system_prompt(), &prompt)
             .await?;
 
         // 4. Parse response
@@ -202,7 +230,7 @@ impl<L: LLM> ResearchRunner<L> {
 
             // Start streaming
             self.llm
-                .stream_complete(RESEARCH_SYSTEM_PROMPT, &prompt, collector_tx)
+                .stream_complete(self.system_prompt(), &prompt, collector_tx)
                 .await?;
 
             // Wait for collection to complete
@@ -211,7 +239,7 @@ impl<L: LLM> ResearchRunner<L> {
             // Non-streaming fallback
             let response = self
                 .llm
-                .complete_with_system(RESEARCH_SYSTEM_PROMPT, &prompt)
+                .complete_with_system(self.system_prompt(), &prompt)
                 .await?;
             // Send as single chunk
             let _ = stream_tx.send(StreamChunk::text(response.clone()));
@@ -239,7 +267,7 @@ impl<L: LLM> ResearchRunner<L> {
         query: &str,
     ) -> Result<(String, Vec<Source>), ResearchError> {
         // 1. Semantic search to find relevant code chunks
-        let results: Vec<SearchResult> = kg.search_code(query, 15).await?;
+        let results: Vec<SearchResult> = kg.search_code(query, self.search_limit).await?;
 
         if results.is_empty() {
             // Fall back to regular context gathering if no results

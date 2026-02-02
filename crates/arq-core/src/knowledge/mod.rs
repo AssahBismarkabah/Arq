@@ -111,6 +111,7 @@ pub struct KnowledgeGraph {
 
 impl KnowledgeGraph {
     /// Create a new knowledge graph with the given database path.
+    /// Uses the default embedding model (BGESmallENV15).
     pub async fn new(db_path: &Path) -> Result<Self, KnowledgeError> {
         let db = KnowledgeDb::open(db_path).await?;
         let embedder = embedder::FastEmbedder::new()?;
@@ -121,9 +122,26 @@ impl KnowledgeGraph {
         })
     }
 
-    /// Open an existing knowledge graph.
+    /// Create a new knowledge graph with a specific embedding model.
+    /// The model_name should be the model code (e.g., "Xenova/bge-small-en-v1.5").
+    pub async fn with_model(db_path: &Path, model_name: &str) -> Result<Self, KnowledgeError> {
+        let db = KnowledgeDb::open(db_path).await?;
+        let embedder = embedder::FastEmbedder::from_model_name(model_name)?;
+
+        Ok(Self {
+            db: Arc::new(db),
+            embedder: Arc::new(embedder),
+        })
+    }
+
+    /// Open an existing knowledge graph with default model.
     pub async fn open(db_path: &Path) -> Result<Self, KnowledgeError> {
         Self::new(db_path).await
+    }
+
+    /// Open an existing knowledge graph with a specific embedding model.
+    pub async fn open_with_model(db_path: &Path, model_name: &str) -> Result<Self, KnowledgeError> {
+        Self::with_model(db_path, model_name).await
     }
 
     /// Get extended statistics including rich ontology entity counts.
@@ -184,10 +202,36 @@ impl KnowledgeGraph {
     where
         F: Fn(IndexProgress) + Send + Sync,
     {
+        self.index_directory_with_config(path, None, None, on_progress)
+            .await
+    }
+
+    /// Index a directory with custom chunk configuration.
+    ///
+    /// # Arguments
+    /// * `path` - Directory to index
+    /// * `max_chunk_size` - Maximum chunk size in characters (None for default)
+    /// * `chunk_overlap` - Chunk overlap in characters (None for default)
+    /// * `on_progress` - Progress callback
+    pub async fn index_directory_with_config<F>(
+        &self,
+        path: &Path,
+        max_chunk_size: Option<usize>,
+        chunk_overlap: Option<usize>,
+        on_progress: F,
+    ) -> Result<IndexStats, KnowledgeError>
+    where
+        F: Fn(IndexProgress) + Send + Sync,
+    {
         use indexer::Indexer;
 
-        let indexer =
+        let mut indexer =
             indexer::GenericIndexer::new(Arc::clone(&self.db), Arc::clone(&self.embedder));
+
+        // Apply custom chunk config if provided
+        if let (Some(size), Some(overlap)) = (max_chunk_size, chunk_overlap) {
+            indexer = indexer.with_chunk_config(size, overlap);
+        }
 
         indexer
             .index_directory_with_progress(path, on_progress)
