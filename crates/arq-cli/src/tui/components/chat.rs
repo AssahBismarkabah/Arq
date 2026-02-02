@@ -1,4 +1,4 @@
-//! Chat message display component.
+//! Chat message display component with syntax highlighting.
 
 use ratatui::{
     prelude::*,
@@ -6,6 +6,7 @@ use ratatui::{
 };
 
 use crate::tui::app::{App, MessageRole};
+use crate::tui::highlight::{highlight_markdown, Highlighter};
 
 /// Wrap text to fit within a given width.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
@@ -52,7 +53,6 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
         }
     }
 
-    // Add empty line if text was empty
     if lines.is_empty() {
         lines.push(String::new());
     }
@@ -60,7 +60,7 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-/// Render the chat message list.
+/// Render the chat message list with syntax highlighting.
 pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     let tab_title = app.selected_tab.title();
 
@@ -73,74 +73,107 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     let inner_area = block.inner(area);
     frame.render_widget(block, area);
 
-    // Calculate available width for text (subtract prefix width)
-    let prefix_width = 10; // "[System] " is the longest prefix
+    let prefix_width = 10;
     let text_width = (inner_area.width as usize).saturating_sub(prefix_width);
 
-    // Build all lines with proper wrapping
     let mut all_lines: Vec<Line> = Vec::new();
 
     for msg in app.chat_messages() {
-        let (prefix_style, content_style) = match msg.role {
-            MessageRole::User => (
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-                Style::default().fg(Color::White),
-            ),
-            MessageRole::Assistant => (
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-                Style::default().fg(Color::White),
-            ),
-            MessageRole::System => (
-                Style::default().fg(Color::Yellow),
-                Style::default().fg(Color::DarkGray),
-            ),
+        let prefix_style = match msg.role {
+            MessageRole::User => Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+            MessageRole::Assistant => Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+            MessageRole::System => Style::default().fg(Color::Yellow),
         };
 
         let prefix = format!("[{}] ", msg.role.as_str());
-        let indent = "       "; // Spaces to align continuation lines
+        let indent = "       ";
 
-        // Wrap the message content
-        let wrapped_lines = wrap_text(&msg.content, text_width);
+        // Create highlighter for this message
+        let mut highlighter = Highlighter::new();
 
-        for (i, line) in wrapped_lines.into_iter().enumerate() {
-            if i == 0 {
-                all_lines.push(Line::from(vec![
-                    Span::styled(prefix.clone(), prefix_style),
-                    Span::styled(line, content_style),
-                ]));
-            } else {
-                all_lines.push(Line::from(vec![
-                    Span::styled(indent.to_string(), Style::default()),
-                    Span::styled(line, content_style),
-                ]));
+        for (i, line) in msg.content.lines().enumerate() {
+            let wrapped_lines = wrap_text(line, text_width);
+
+            for (j, wrapped_line) in wrapped_lines.into_iter().enumerate() {
+                let mut spans = Vec::new();
+
+                // Add prefix or indent
+                if i == 0 && j == 0 {
+                    spans.push(Span::styled(prefix.clone(), prefix_style));
+                } else {
+                    spans.push(Span::styled(indent.to_string(), Style::default()));
+                }
+
+                // Apply syntax highlighting based on role
+                match msg.role {
+                    MessageRole::Assistant => {
+                        // Check for markdown first
+                        if let Some(md_spans) = highlight_markdown(&wrapped_line) {
+                            spans.extend(md_spans);
+                        } else {
+                            spans.extend(highlighter.highlight_line(&wrapped_line));
+                        }
+                    }
+                    MessageRole::System => {
+                        spans.push(Span::styled(
+                            wrapped_line,
+                            Style::default().fg(Color::DarkGray),
+                        ));
+                    }
+                    MessageRole::User => {
+                        spans.push(Span::styled(
+                            wrapped_line,
+                            Style::default().fg(Color::White),
+                        ));
+                    }
+                }
+
+                all_lines.push(Line::from(spans));
             }
+        }
+
+        // Handle empty messages
+        if msg.content.is_empty() {
+            all_lines.push(Line::from(vec![
+                Span::styled(prefix.clone(), prefix_style),
+                Span::raw(String::new()),
+            ]));
         }
     }
 
     // Add streaming buffer if active
     if app.is_streaming && !app.stream_buffer.is_empty() {
-        let wrapped_lines = wrap_text(&app.stream_buffer, text_width);
+        let mut highlighter = Highlighter::new();
 
-        for (i, line) in wrapped_lines.into_iter().enumerate() {
-            if i == 0 {
-                all_lines.push(Line::from(vec![
-                    Span::styled(
+        for (i, line) in app.stream_buffer.lines().enumerate() {
+            let wrapped_lines = wrap_text(line, text_width);
+
+            for (j, wrapped_line) in wrapped_lines.into_iter().enumerate() {
+                let mut spans = Vec::new();
+
+                if i == 0 && j == 0 {
+                    spans.push(Span::styled(
                         "[Arq] ".to_string(),
                         Style::default()
                             .fg(Color::Green)
                             .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(line, Style::default().fg(Color::White)),
-                ]));
-            } else {
-                all_lines.push(Line::from(vec![
-                    Span::styled("       ".to_string(), Style::default()),
-                    Span::styled(line, Style::default().fg(Color::White)),
-                ]));
+                    ));
+                } else {
+                    spans.push(Span::styled("       ".to_string(), Style::default()));
+                }
+
+                // Check for markdown first
+                if let Some(md_spans) = highlight_markdown(&wrapped_line) {
+                    spans.extend(md_spans);
+                } else {
+                    spans.extend(highlighter.highlight_line(&wrapped_line));
+                }
+
+                all_lines.push(Line::from(spans));
             }
         }
     }
@@ -149,18 +182,14 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     let visible_height = inner_area.height as usize;
     let total_lines = all_lines.len();
 
-    // Auto-scroll to bottom unless user has scrolled up
     let start_index = if app.scroll_offset() > 0 {
-        // User has scrolled up - show earlier content
         total_lines
             .saturating_sub(visible_height)
             .saturating_sub(app.scroll_offset())
     } else {
-        // Auto-scroll to bottom
         total_lines.saturating_sub(visible_height)
     };
 
-    // Check if there's more content above or below
     let has_more_above = start_index > 0;
     let has_more_below = start_index + visible_height < total_lines;
 
@@ -173,7 +202,7 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     let paragraph = Paragraph::new(visible_lines);
     frame.render_widget(paragraph, inner_area);
 
-    // Show scroll indicators if there's more content
+    // Show scroll indicators
     if has_more_above {
         let indicator = Paragraph::new("▲ more above (k to scroll up)")
             .style(Style::default().fg(Color::DarkGray));

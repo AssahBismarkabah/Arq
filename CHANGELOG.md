@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`arq tui --continue`**: Restore previous session state when reopening TUI
 - **Per-tab chat history**: Each tab (Researcher, Planner, Agent) maintains its own messages and scroll position
 - **Planning progress indicators**: Visual feedback during approach generation and plan creation
+- **Syntax highlighting in chat**:  code highlighting using `syntect` library with support for 100+ languages
 
 ### Changed
 

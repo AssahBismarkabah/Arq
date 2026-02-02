@@ -9,6 +9,7 @@
 mod app;
 mod components;
 mod event;
+mod highlight;
 mod ui;
 
 use crossterm::{
