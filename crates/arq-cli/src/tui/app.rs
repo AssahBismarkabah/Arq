@@ -805,7 +805,9 @@ impl App {
         // Get previous accepted results from current state
         let accepted_results = match std::mem::take(&mut self.agent_state) {
             AgentState::Generating => Vec::new(),
-            AgentState::AwaitingReview { accepted_results, .. } => accepted_results,
+            AgentState::AwaitingReview {
+                accepted_results, ..
+            } => accepted_results,
             _ => Vec::new(),
         };
 
@@ -844,10 +846,7 @@ impl App {
                 .iter()
                 .map(|d| format!("  - {}", d.description))
                 .collect();
-            format!(
-                "**Conformance:** FAILED\n{}",
-                deviations.join("\n")
-            )
+            format!("**Conformance:** FAILED\n{}", deviations.join("\n"))
         };
         self.chat_messages_mut()
             .push(ChatMessage::system(&conformance_msg));
@@ -861,9 +860,8 @@ impl App {
             accepted_results,
         };
 
-        self.chat_messages_mut().push(ChatMessage::system(
-            "[a] Accept  [s] Skip  [r] Regenerate",
-        ));
+        self.chat_messages_mut()
+            .push(ChatMessage::system("[a] Accept  [s] Skip  [r] Regenerate"));
         self.status_message = Some(format!(
             "Item {}/{} - [a] accept, [s] skip, [r] regenerate",
             item_num, total
@@ -1038,7 +1036,13 @@ impl App {
             self.agent_state = AgentState::Generating;
 
             // Signal to generate next item
-            self.trigger_next_agent_item(task_id, next_index, total_items, accepted_results, event_tx);
+            self.trigger_next_agent_item(
+                task_id,
+                next_index,
+                total_items,
+                accepted_results,
+                event_tx,
+            );
         }
     }
 
@@ -1091,7 +1095,13 @@ impl App {
             // More items - trigger generation of next item
             self.agent_state = AgentState::Generating;
 
-            self.trigger_next_agent_item(task_id, next_index, total_items, accepted_results, event_tx);
+            self.trigger_next_agent_item(
+                task_id,
+                next_index,
+                total_items,
+                accepted_results,
+                event_tx,
+            );
         }
     }
 
@@ -1122,7 +1132,13 @@ impl App {
         self.agent_state = AgentState::Generating;
 
         // Trigger regeneration of current item
-        self.trigger_next_agent_item(task_id, current_index, total_items, accepted_results, event_tx);
+        self.trigger_next_agent_item(
+            task_id,
+            current_index,
+            total_items,
+            accepted_results,
+            event_tx,
+        );
     }
 
     /// Trigger generation of next agent item.
@@ -1135,7 +1151,11 @@ impl App {
         event_tx: mpsc::UnboundedSender<Event>,
     ) {
         self.is_streaming = true;
-        self.status_message = Some(format!("Generating item {}/{}...", item_index + 1, total_items));
+        self.status_message = Some(format!(
+            "Generating item {}/{}...",
+            item_index + 1,
+            total_items
+        ));
 
         // Get plan from current task
         let plan = match &self.current_task {
@@ -1252,12 +1272,13 @@ impl App {
 
         // Report results
         if errors.is_empty() {
-            self.chat_messages_mut().push(ChatMessage::assistant(format!(
-                "## Changes Applied\n\n\
+            self.chat_messages_mut()
+                .push(ChatMessage::assistant(format!(
+                    "## Changes Applied\n\n\
                  - Created: {} files\n\
                  - Modified: {} files",
-                created, modified
-            )));
+                    created, modified
+                )));
 
             // Advance phase if needed
             if let Some(ref task) = self.current_task {
@@ -2389,7 +2410,9 @@ async fn run_single_agent_item(
         .map_err(|e| e.to_string())?;
 
     // Send awaiting review progress
-    let _ = event_tx.send(Event::AgentProgress(AgentProgress::AwaitingReview { item_index }));
+    let _ = event_tx.send(Event::AgentProgress(AgentProgress::AwaitingReview {
+        item_index,
+    }));
 
     Ok(AgentGeneratedResult {
         task_id,
