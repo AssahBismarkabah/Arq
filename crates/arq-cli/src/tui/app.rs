@@ -103,10 +103,7 @@ pub enum PlanningState {
         selected_approach: Approach,
     },
     /// Awaiting user approval of generated plan
-    AwaitingApproval {
-        task_id: String,
-        pending_plan: Plan,
-    },
+    AwaitingApproval { task_id: String, pending_plan: Plan },
 }
 
 /// A chat message in the conversation.
@@ -336,9 +333,8 @@ impl App {
                             "**Research Summary:**\n{}",
                             doc.summary
                         )));
-                        app.researcher_messages.push(ChatMessage::system(
-                            "Research complete.",
-                        ));
+                        app.researcher_messages
+                            .push(ChatMessage::system("Research complete."));
                     }
                     // Show plan or prompt in planner tab
                     if let Some(ref plan) = task.plan {
@@ -365,9 +361,8 @@ impl App {
                 }
                 arq_core::Phase::Complete => {
                     app.selected_tab = SelectedTab::Agent;
-                    app.agent_messages.push(ChatMessage::system(
-                        "Task complete! All phases finished.",
-                    ));
+                    app.agent_messages
+                        .push(ChatMessage::system("Task complete! All phases finished."));
                 }
             }
         } else {
@@ -440,7 +435,8 @@ impl App {
                     Event::StreamComplete => {
                         if !self.stream_buffer.is_empty() {
                             let content = std::mem::take(&mut self.stream_buffer);
-                            self.chat_messages_mut().push(ChatMessage::assistant(content));
+                            self.chat_messages_mut()
+                                .push(ChatMessage::assistant(content));
                         }
                         self.is_streaming = false;
                     }
@@ -534,7 +530,8 @@ impl App {
 
         // Use the document's built-in markdown formatting for complete display
         let content = result.doc.to_markdown();
-        self.chat_messages_mut().push(ChatMessage::assistant(&content));
+        self.chat_messages_mut()
+            .push(ChatMessage::assistant(&content));
 
         // Set awaiting validation state (DON'T save yet - wait for approval)
         self.research_state = ResearchState::AwaitingValidation {
@@ -613,7 +610,8 @@ impl App {
 
         // Display approaches for user selection
         let content = result.options.to_display_string();
-        self.chat_messages_mut().push(ChatMessage::assistant(&content));
+        self.chat_messages_mut()
+            .push(ChatMessage::assistant(&content));
 
         // Add instruction
         self.chat_messages_mut().push(ChatMessage::system(
@@ -626,8 +624,7 @@ impl App {
             approaches: result.options,
         };
 
-        self.status_message =
-            Some("[i] Edit → type 1/2/3 → Enter to select".to_string());
+        self.status_message = Some("[i] Edit → type 1/2/3 → Enter to select".to_string());
     }
 
     /// Handle planning complete.
@@ -639,7 +636,8 @@ impl App {
             Ok(yaml) => format!("## Generated Plan\n\n```yaml\n{}\n```", yaml),
             Err(_) => format!("{:?}", result.plan),
         };
-        self.chat_messages_mut().push(ChatMessage::assistant(&content));
+        self.chat_messages_mut()
+            .push(ChatMessage::assistant(&content));
 
         // Set awaiting approval state
         self.planning_state = PlanningState::AwaitingApproval {
@@ -650,7 +648,8 @@ impl App {
         self.chat_messages_mut().push(ChatMessage::system(
             "Press [a] to approve and save the plan, or type refinements.",
         ));
-        self.status_message = Some("Awaiting approval... [a] approve, [i] type refinements".to_string());
+        self.status_message =
+            Some("Awaiting approval... [a] approve, [i] type refinements".to_string());
     }
 
     /// Handle planning failure.
@@ -698,10 +697,8 @@ impl App {
                 self.planning_state = PlanningState::Idle;
             }
             Err(e) => {
-                self.chat_messages_mut().push(ChatMessage::system(format!(
-                    "Failed to save plan: {}",
-                    e
-                )));
+                self.chat_messages_mut()
+                    .push(ChatMessage::system(format!("Failed to save plan: {}", e)));
                 // Restore state for retry
                 self.planning_state = PlanningState::AwaitingApproval {
                     task_id,
@@ -997,8 +994,9 @@ impl App {
         let research_doc = match &task.research_doc {
             Some(doc) => doc.clone(),
             None => {
-                self.chat_messages_mut()
-                    .push(ChatMessage::system("No research document. Complete research first."));
+                self.chat_messages_mut().push(ChatMessage::system(
+                    "No research document. Complete research first.",
+                ));
                 return;
             }
         };
@@ -1035,7 +1033,10 @@ impl App {
     /// Select an approach and generate detailed plan.
     fn select_approach(&mut self, index: usize, event_tx: mpsc::UnboundedSender<Event>) {
         // Extract state values
-        let (task_id, approaches) = if let PlanningState::AwaitingSelection { task_id, approaches } =
+        let (task_id, approaches) = if let PlanningState::AwaitingSelection {
+            task_id,
+            approaches,
+        } =
             std::mem::replace(&mut self.planning_state, PlanningState::Idle)
         {
             (task_id, approaches)
@@ -1052,7 +1053,10 @@ impl App {
                     approaches.len()
                 )));
                 // Restore state
-                self.planning_state = PlanningState::AwaitingSelection { task_id, approaches };
+                self.planning_state = PlanningState::AwaitingSelection {
+                    task_id,
+                    approaches,
+                };
                 return;
             }
         };
@@ -1093,7 +1097,8 @@ impl App {
         tokio::spawn(async move {
             match run_planning_spec(research_doc, approach, config, event_tx.clone()).await {
                 Ok(plan) => {
-                    let _ = event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
+                    let _ =
+                        event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
                 }
                 Err(error) => {
                     let _ = event_tx.send(Event::PlanningFailed(error));
@@ -1103,9 +1108,16 @@ impl App {
     }
 
     /// Create a custom approach from user description.
-    fn create_custom_approach(&mut self, description: String, event_tx: mpsc::UnboundedSender<Event>) {
+    fn create_custom_approach(
+        &mut self,
+        description: String,
+        event_tx: mpsc::UnboundedSender<Event>,
+    ) {
         // Extract state values
-        let (task_id, _approaches) = if let PlanningState::AwaitingSelection { task_id, approaches } =
+        let (task_id, _approaches) = if let PlanningState::AwaitingSelection {
+            task_id,
+            approaches,
+        } =
             std::mem::replace(&mut self.planning_state, PlanningState::Idle)
         {
             (task_id, approaches)
@@ -1153,7 +1165,8 @@ impl App {
         tokio::spawn(async move {
             match run_planning_spec(research_doc, approach, config, event_tx.clone()).await {
                 Ok(plan) => {
-                    let _ = event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
+                    let _ =
+                        event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
                 }
                 Err(error) => {
                     let _ = event_tx.send(Event::PlanningFailed(error));
@@ -1166,7 +1179,10 @@ impl App {
     fn refine_plan(&mut self, feedback: String, event_tx: mpsc::UnboundedSender<Event>) {
         // For now, regenerate plan with the feedback included in the prompt
         // Extract state values
-        let (task_id, _pending_plan) = if let PlanningState::AwaitingApproval { task_id, pending_plan } =
+        let (task_id, _pending_plan) = if let PlanningState::AwaitingApproval {
+            task_id,
+            pending_plan,
+        } =
             std::mem::replace(&mut self.planning_state, PlanningState::Idle)
         {
             (task_id, pending_plan)
@@ -1217,7 +1233,8 @@ impl App {
         tokio::spawn(async move {
             match run_planning_spec(research_doc, approach, config, event_tx.clone()).await {
                 Ok(plan) => {
-                    let _ = event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
+                    let _ =
+                        event_tx.send(Event::PlanningComplete(PlanningResult { task_id, plan }));
                 }
                 Err(error) => {
                     let _ = event_tx.send(Event::PlanningFailed(error));
@@ -1472,12 +1489,16 @@ async fn run_planning_approaches(
 
     // Send progress events
     let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::Started));
-    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::LoadingResearch));
+    let _ = event_tx.send(Event::PlanningProgress(
+        CorePlanningProgress::LoadingResearch,
+    ));
 
     let provider = config.llm.provider.as_str();
     let model = config.llm.model_or_default();
 
-    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::GeneratingApproaches));
+    let _ = event_tx.send(Event::PlanningProgress(
+        CorePlanningProgress::GeneratingApproaches,
+    ));
 
     let options = match provider {
         "anthropic" | "claude" => {
@@ -1514,7 +1535,9 @@ async fn run_planning_approaches(
     };
 
     let count = options.len();
-    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::ApproachesReady(count)));
+    let _ = event_tx.send(Event::PlanningProgress(
+        CorePlanningProgress::ApproachesReady(count),
+    ));
 
     Ok(options)
 }
@@ -1529,7 +1552,9 @@ async fn run_planning_spec(
 ) -> Result<Plan, String> {
     use arq_core::{ClaudeClient, OpenAIClient, PlanningProgress as CorePlanningProgress};
 
-    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::GeneratingSpec));
+    let _ = event_tx.send(Event::PlanningProgress(
+        CorePlanningProgress::GeneratingSpec,
+    ));
 
     let provider = config.llm.provider.as_str();
     let model = config.llm.model_or_default();
@@ -1568,7 +1593,9 @@ async fn run_planning_spec(
         }
     };
 
-    let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::CheckingComplexity));
+    let _ = event_tx.send(Event::PlanningProgress(
+        CorePlanningProgress::CheckingComplexity,
+    ));
     let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::Complete));
 
     Ok(plan)

@@ -251,7 +251,8 @@ impl<L: LLM> PlanningRunner<L> {
         // Check for empty response
         if response.trim().is_empty() {
             return Err(PlanningError::ParseError(
-                "LLM returned an empty response. This may indicate an API issue or rate limiting.".to_string()
+                "LLM returned an empty response. This may indicate an API issue or rate limiting."
+                    .to_string(),
             ));
         }
 

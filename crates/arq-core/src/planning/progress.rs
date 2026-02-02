@@ -39,7 +39,10 @@ impl PlanningProgress {
 
     /// Returns true if this is a terminal state (Complete or Error).
     pub fn is_terminal(&self) -> bool {
-        matches!(self, PlanningProgress::Complete | PlanningProgress::Error(_))
+        matches!(
+            self,
+            PlanningProgress::Complete | PlanningProgress::Error(_)
+        )
     }
 
     /// Returns true if this is an error state.

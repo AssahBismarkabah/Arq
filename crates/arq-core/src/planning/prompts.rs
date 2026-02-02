@@ -104,7 +104,10 @@ pub fn build_approaches_prompt(research: &ResearchDoc) -> String {
         } else {
             "internal"
         };
-        prompt.push_str(&format!("- {} ({}): {}\n", dep.name, dep_type, dep.description));
+        prompt.push_str(&format!(
+            "- {} ({}): {}\n",
+            dep.name, dep_type, dep.description
+        ));
     }
     prompt.push('\n');
 
@@ -112,7 +115,9 @@ pub fn build_approaches_prompt(research: &ResearchDoc) -> String {
     prompt.push_str(&research.suggested_approach);
     prompt.push_str("\n\n");
 
-    prompt.push_str("Based on this research, propose 2-3 implementation approaches with trade-offs.\n");
+    prompt.push_str(
+        "Based on this research, propose 2-3 implementation approaches with trade-offs.\n",
+    );
 
     prompt
 }
@@ -123,7 +128,8 @@ pub fn build_spec_prompt(research: &ResearchDoc, approach: &Approach) -> String 
     let mut prompt = String::new();
 
     // Include instructions inline for better compatibility
-    prompt.push_str("You are creating an implementation specification. Output ONLY valid JSON.\n\n");
+    prompt
+        .push_str("You are creating an implementation specification. Output ONLY valid JSON.\n\n");
 
     prompt.push_str("# Task\n\n");
     prompt.push_str(&research.task_name);
@@ -166,15 +172,21 @@ pub fn build_spec_prompt(research: &ResearchDoc, approach: &Approach) -> String 
         } else {
             "internal"
         };
-        prompt.push_str(&format!("- {} ({}): {}\n", dep.name, dep_type, dep.description));
+        prompt.push_str(&format!(
+            "- {} ({}): {}\n",
+            dep.name, dep_type, dep.description
+        ));
     }
     prompt.push('\n');
 
-    prompt.push_str("Generate a detailed implementation specification for the selected approach.\n");
-    prompt.push_str("Be specific about exact file paths, function signatures, and code changes.\n\n");
+    prompt
+        .push_str("Generate a detailed implementation specification for the selected approach.\n");
+    prompt
+        .push_str("Be specific about exact file paths, function signatures, and code changes.\n\n");
 
     // Add JSON format inline for better compatibility with various LLM providers
-    prompt.push_str(r#"Output ONLY valid JSON with this structure:
+    prompt.push_str(
+        r#"Output ONLY valid JSON with this structure:
 {
   "task_name": "Name of the task",
   "approach": "Selected approach name",
@@ -188,7 +200,8 @@ pub fn build_spec_prompt(research: &ResearchDoc, approach: &Approach) -> String 
   "dependencies_to_add": []
 }
 
-Return ONLY the JSON, no markdown or explanation."#);
+Return ONLY the JSON, no markdown or explanation."#,
+    );
 
     prompt
 }

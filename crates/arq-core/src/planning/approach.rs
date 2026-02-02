@@ -61,7 +61,11 @@ impl Approach {
         let mut s = String::new();
 
         // Header with index and name
-        let rec = if self.recommended { " (Recommended)" } else { "" };
+        let rec = if self.recommended {
+            " (Recommended)"
+        } else {
+            ""
+        };
         s.push_str(&format!("[{}] {}{}\n", index + 1, self.name, rec));
 
         // Description
