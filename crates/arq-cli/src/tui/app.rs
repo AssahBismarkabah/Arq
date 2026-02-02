@@ -7,12 +7,16 @@ use std::io::Stdout;
 use tokio::sync::mpsc;
 
 use arq_core::{
-    Approach, ApproachOptions, Config, ContextBuilder, FileStorage, KnowledgeGraph, KnowledgeStore,
+    AgentExecutor, AgentProgress as CoreAgentProgress, Approach, ApproachOptions, Config,
+    ContextBuilder, FileOperation, FileStorage, GeneratedCode, KnowledgeGraph, KnowledgeStore,
     Plan, PlanningProgress, PlanningRunner, ResearchDoc, ResearchProgress, ResearchRunner, Task,
     TaskManager,
 };
 
-use super::event::{ApproachesResult, Event, EventHandler, PlanningResult, ResearchResult};
+use super::event::{
+    AgentCompleteResult, AgentGeneratedResult, ApproachesResult, Event, EventHandler,
+    PlanningResult, ResearchResult,
+};
 use super::ui;
 
 /// The selected tab in the TUI.
@@ -104,6 +108,40 @@ pub enum PlanningState {
     },
     /// Awaiting user approval of generated plan
     AwaitingApproval { task_id: String, pending_plan: Plan },
+}
+
+/// Agent phase state for interactive code review.
+#[derive(Debug, Clone, Default)]
+pub enum AgentState {
+    /// No agent activity
+    #[default]
+    Idle,
+    /// Generating code for current item
+    Generating,
+    /// Awaiting user review of generated code
+    AwaitingReview {
+        task_id: String,
+        current_index: usize,
+        total_items: usize,
+        generated: GeneratedCode,
+        /// Accumulated results from previous items
+        accepted_results: Vec<AcceptedItem>,
+    },
+    /// All items reviewed, awaiting final approval to apply
+    AwaitingFinalApproval {
+        task_id: String,
+        accepted_results: Vec<AcceptedItem>,
+    },
+    /// Changes applied successfully
+    Complete,
+}
+
+/// An accepted item ready to be applied.
+#[derive(Debug, Clone)]
+pub struct AcceptedItem {
+    pub path: String,
+    pub content: String,
+    pub is_new: bool,
 }
 
 /// A chat message in the conversation.
@@ -244,6 +282,8 @@ pub struct App {
     pub research_state: ResearchState,
     /// Planning phase state
     pub planning_state: PlanningState,
+    /// Agent phase state
+    pub agent_state: AgentState,
     /// Index of currently selected model in available_models
     pub selected_model_index: usize,
     /// Tick counter for cycling messages
@@ -296,6 +336,7 @@ impl App {
             status_message: None,
             research_state: ResearchState::Idle,
             planning_state: PlanningState::Idle,
+            agent_state: AgentState::Idle,
             selected_model_index,
             tick_count: 0,
             knowledge_graph: None, // Initialized lazily during first research
@@ -460,6 +501,18 @@ impl App {
                     }
                     Event::PlanningFailed(error) => {
                         self.handle_planning_failed(error);
+                    }
+                    Event::AgentProgress(progress) => {
+                        self.handle_agent_progress(progress);
+                    }
+                    Event::AgentGenerated(result) => {
+                        self.handle_agent_generated(result);
+                    }
+                    Event::AgentComplete(result) => {
+                        self.handle_agent_complete(result);
+                    }
+                    Event::AgentFailed(error) => {
+                        self.handle_agent_failed(error);
                     }
                 }
             }
@@ -667,6 +720,199 @@ impl App {
         }
     }
 
+    /// Handle agent progress updates.
+    fn handle_agent_progress(&mut self, progress: CoreAgentProgress) {
+        match progress {
+            CoreAgentProgress::LoadingPlan => {
+                self.set_progress_status(0, ProgressStatus::InProgress);
+            }
+            CoreAgentProgress::StartingExecution { total_items } => {
+                self.set_progress_status(0, ProgressStatus::Complete);
+                self.status_message = Some(format!("Executing {} items", total_items));
+            }
+            CoreAgentProgress::GeneratingCode {
+                item_index,
+                total_items,
+                item_description,
+            } => {
+                self.set_progress_status(1, ProgressStatus::InProgress);
+                self.status_message = Some(format!(
+                    "Generating [{}/{}]: {}",
+                    item_index + 1,
+                    total_items,
+                    item_description
+                ));
+            }
+            CoreAgentProgress::CheckingConformance { item_index } => {
+                self.set_progress_status(2, ProgressStatus::InProgress);
+                self.status_message =
+                    Some(format!("Checking conformance for item {}", item_index + 1));
+            }
+            CoreAgentProgress::AwaitingReview { item_index } => {
+                self.set_progress_status(2, ProgressStatus::Complete);
+                self.status_message = Some(format!(
+                    "Awaiting review for item {} - [a] accept, [s] skip, [r] regenerate",
+                    item_index + 1
+                ));
+            }
+            CoreAgentProgress::ItemAccepted { item_index } => {
+                self.status_message = Some(format!("Item {} accepted", item_index + 1));
+            }
+            CoreAgentProgress::Regenerating { item_index } => {
+                self.set_progress_status(1, ProgressStatus::InProgress);
+                self.status_message = Some(format!("Regenerating item {}", item_index + 1));
+            }
+            CoreAgentProgress::RunningTests => {
+                self.set_progress_status(3, ProgressStatus::InProgress);
+            }
+            CoreAgentProgress::AwaitingApproval => {
+                self.set_progress_status(3, ProgressStatus::Complete);
+                self.status_message =
+                    Some("All items generated. [a] apply changes, [d] discard".to_string());
+            }
+            CoreAgentProgress::ApplyingChanges => {
+                self.status_message = Some("Applying changes to filesystem...".to_string());
+            }
+            CoreAgentProgress::Complete {
+                files_created,
+                files_modified,
+            } => {
+                for item in &mut self.progress_items {
+                    item.status = ProgressStatus::Complete;
+                }
+                self.status_message = Some(format!(
+                    "Complete: {} created, {} modified",
+                    files_created, files_modified
+                ));
+            }
+            CoreAgentProgress::Failed { message } => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system(format!("Agent error: {}", message)));
+                for item in &mut self.progress_items {
+                    if item.status == ProgressStatus::InProgress {
+                        item.status = ProgressStatus::Failed;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Handle agent generated code for one item.
+    fn handle_agent_generated(&mut self, result: AgentGeneratedResult) {
+        self.is_streaming = false;
+
+        // Get previous accepted results from current state
+        let accepted_results = match std::mem::take(&mut self.agent_state) {
+            AgentState::Generating => Vec::new(),
+            AgentState::AwaitingReview { accepted_results, .. } => accepted_results,
+            _ => Vec::new(),
+        };
+
+        // Display item info
+        let item_num = result.current_index + 1;
+        let total = result.total_items;
+        let is_new = matches!(result.generated.operation, FileOperation::Create);
+        let op_type = if is_new { "CREATE" } else { "MODIFY" };
+
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "--- Item {}/{} [{}] ---",
+            item_num, total, op_type
+        )));
+
+        // Display generated code with syntax highlighting hint
+        let extension = std::path::Path::new(&result.generated.file_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("txt");
+
+        let content = format!(
+            "**File:** `{}`\n\n```{}\n{}\n```",
+            result.generated.file_path, extension, result.generated.content
+        );
+        self.chat_messages_mut()
+            .push(ChatMessage::assistant(&content));
+
+        // Show conformance status
+        let conformance_msg = if result.generated.conformance.passed {
+            "**Conformance:** PASSED".to_string()
+        } else {
+            let deviations: Vec<String> = result
+                .generated
+                .conformance
+                .deviations
+                .iter()
+                .map(|d| format!("  - {}", d.description))
+                .collect();
+            format!(
+                "**Conformance:** FAILED\n{}",
+                deviations.join("\n")
+            )
+        };
+        self.chat_messages_mut()
+            .push(ChatMessage::system(&conformance_msg));
+
+        // Set awaiting review state
+        self.agent_state = AgentState::AwaitingReview {
+            task_id: result.task_id,
+            current_index: result.current_index,
+            total_items: result.total_items,
+            generated: result.generated,
+            accepted_results,
+        };
+
+        self.chat_messages_mut().push(ChatMessage::system(
+            "[a] Accept  [s] Skip  [r] Regenerate",
+        ));
+        self.status_message = Some(format!(
+            "Item {}/{} - [a] accept, [s] skip, [r] regenerate",
+            item_num, total
+        ));
+    }
+
+    /// Handle agent execution complete.
+    fn handle_agent_complete(&mut self, result: AgentCompleteResult) {
+        self.is_streaming = false;
+
+        let content = format!(
+            "## Agent Complete\n\n\
+             Created: {} files\n\
+             Modified: {} files\n\
+             All conformance passed: {}",
+            result.summary.files_created.len(),
+            result.summary.files_modified.len(),
+            if result.summary.all_conformance_passed {
+                "Yes"
+            } else {
+                "No"
+            }
+        );
+        self.chat_messages_mut()
+            .push(ChatMessage::assistant(&content));
+
+        self.agent_state = AgentState::Complete;
+
+        self.chat_messages_mut()
+            .push(ChatMessage::system("All changes applied successfully!"));
+
+        self.status_message = Some("Agent complete. Changes ready for commit.".to_string());
+    }
+
+    /// Handle agent failure.
+    fn handle_agent_failed(&mut self, error: String) {
+        self.is_streaming = false;
+        self.agent_state = AgentState::Idle;
+        self.chat_messages_mut()
+            .push(ChatMessage::system(format!("Agent failed: {}", error)));
+
+        for item in &mut self.progress_items {
+            if item.status == ProgressStatus::InProgress {
+                item.status = ProgressStatus::Failed;
+                break;
+            }
+        }
+    }
+
     /// Approve plan and save - called when user presses 'a' during approval.
     fn approve_plan(&mut self, task_id: String, plan: Plan) {
         // Auto-advance to Planning phase if still in Research phase
@@ -734,16 +980,329 @@ impl App {
         }
     }
 
+    /// Accept the current agent item and move to next.
+    fn accept_agent_item(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
+        // Extract current state
+        let (task_id, current_index, total_items, generated, mut accepted_results) =
+            if let AgentState::AwaitingReview {
+                task_id,
+                current_index,
+                total_items,
+                generated,
+                accepted_results,
+            } = std::mem::take(&mut self.agent_state)
+            {
+                (
+                    task_id,
+                    current_index,
+                    total_items,
+                    generated,
+                    accepted_results,
+                )
+            } else {
+                return;
+            };
+
+        // Add to accepted results
+        let is_new = matches!(generated.operation, FileOperation::Create);
+        accepted_results.push(AcceptedItem {
+            path: generated.file_path.clone(),
+            content: generated.content.clone(),
+            is_new,
+        });
+
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "Item {}/{} accepted.",
+            current_index + 1,
+            total_items
+        )));
+
+        // Check if all items done
+        let next_index = current_index + 1;
+        if next_index >= total_items {
+            // All items reviewed - move to final approval
+            self.agent_state = AgentState::AwaitingFinalApproval {
+                task_id,
+                accepted_results: accepted_results.clone(),
+            };
+
+            self.chat_messages_mut().push(ChatMessage::system(format!(
+                "All {} items reviewed. {} accepted.\n\
+                 Press [a] to apply all changes, or [d] to discard.",
+                total_items,
+                accepted_results.len()
+            )));
+            self.status_message = Some("[a] Apply changes  [d] Discard".to_string());
+        } else {
+            // More items - trigger generation of next item
+            self.agent_state = AgentState::Generating;
+
+            // Signal to generate next item
+            self.trigger_next_agent_item(task_id, next_index, total_items, accepted_results, event_tx);
+        }
+    }
+
+    /// Skip the current agent item and move to next.
+    fn skip_agent_item(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
+        // Extract current state
+        let (task_id, current_index, total_items, accepted_results) =
+            if let AgentState::AwaitingReview {
+                task_id,
+                current_index,
+                total_items,
+                accepted_results,
+                ..
+            } = std::mem::take(&mut self.agent_state)
+            {
+                (task_id, current_index, total_items, accepted_results)
+            } else {
+                return;
+            };
+
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "Item {}/{} skipped.",
+            current_index + 1,
+            total_items
+        )));
+
+        // Check if all items done
+        let next_index = current_index + 1;
+        if next_index >= total_items {
+            // All items reviewed
+            if accepted_results.is_empty() {
+                self.agent_state = AgentState::Idle;
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No items accepted. Agent cancelled."));
+                self.status_message = Some("Agent cancelled - no changes".to_string());
+            } else {
+                self.agent_state = AgentState::AwaitingFinalApproval {
+                    task_id,
+                    accepted_results: accepted_results.clone(),
+                };
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "All {} items reviewed. {} accepted.\n\
+                     Press [a] to apply all changes, or [d] to discard.",
+                    total_items,
+                    accepted_results.len()
+                )));
+                self.status_message = Some("[a] Apply changes  [d] Discard".to_string());
+            }
+        } else {
+            // More items - trigger generation of next item
+            self.agent_state = AgentState::Generating;
+
+            self.trigger_next_agent_item(task_id, next_index, total_items, accepted_results, event_tx);
+        }
+    }
+
+    /// Regenerate the current agent item.
+    fn regenerate_agent_item(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
+        // Extract current state
+        let (task_id, current_index, total_items, accepted_results) =
+            if let AgentState::AwaitingReview {
+                task_id,
+                current_index,
+                total_items,
+                accepted_results,
+                ..
+            } = std::mem::take(&mut self.agent_state)
+            {
+                (task_id, current_index, total_items, accepted_results)
+            } else {
+                return;
+            };
+
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "Regenerating item {}/{}...",
+            current_index + 1,
+            total_items
+        )));
+
+        // Set state back to generating
+        self.agent_state = AgentState::Generating;
+
+        // Trigger regeneration of current item
+        self.trigger_next_agent_item(task_id, current_index, total_items, accepted_results, event_tx);
+    }
+
+    /// Trigger generation of next agent item.
+    fn trigger_next_agent_item(
+        &mut self,
+        task_id: String,
+        item_index: usize,
+        total_items: usize,
+        accepted_results: Vec<AcceptedItem>,
+        event_tx: mpsc::UnboundedSender<Event>,
+    ) {
+        self.is_streaming = true;
+        self.status_message = Some(format!("Generating item {}/{}...", item_index + 1, total_items));
+
+        // Get plan from current task
+        let plan = match &self.current_task {
+            Some(t) => match &t.plan {
+                Some(p) => p.clone(),
+                None => {
+                    self.chat_messages_mut()
+                        .push(ChatMessage::system("Plan not found."));
+                    self.agent_state = AgentState::Idle;
+                    return;
+                }
+            },
+            None => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No current task."));
+                self.agent_state = AgentState::Idle;
+                return;
+            }
+        };
+
+        let config = self.config.clone();
+
+        // Spawn async task to generate next item
+        tokio::spawn(async move {
+            match run_single_agent_item(
+                plan,
+                config,
+                task_id.clone(),
+                item_index,
+                total_items,
+                accepted_results,
+                event_tx.clone(),
+            )
+            .await
+            {
+                Ok(generated) => {
+                    let _ = event_tx.send(Event::AgentGenerated(generated));
+                }
+                Err(error) => {
+                    let _ = event_tx.send(Event::AgentFailed(error));
+                }
+            }
+        });
+    }
+
+    /// Apply all accepted agent changes to filesystem.
+    fn apply_agent_changes(&mut self) {
+        let (task_id, accepted_results) = if let AgentState::AwaitingFinalApproval {
+            task_id,
+            accepted_results,
+        } = std::mem::take(&mut self.agent_state)
+        {
+            (task_id, accepted_results)
+        } else {
+            return;
+        };
+
+        if accepted_results.is_empty() {
+            self.chat_messages_mut()
+                .push(ChatMessage::system("No changes to apply."));
+            self.agent_state = AgentState::Idle;
+            return;
+        }
+
+        self.chat_messages_mut()
+            .push(ChatMessage::system("Applying changes..."));
+
+        // Get project root
+        let root = match std::env::current_dir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Failed to get current directory: {}",
+                    e
+                )));
+                self.agent_state = AgentState::AwaitingFinalApproval {
+                    task_id,
+                    accepted_results,
+                };
+                return;
+            }
+        };
+
+        // Apply each change
+        let mut created = 0;
+        let mut modified = 0;
+        let mut errors = Vec::new();
+
+        for item in &accepted_results {
+            let path = root.join(&item.path);
+
+            // Create parent directories if needed
+            if let Some(parent) = path.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    errors.push(format!("{}: {}", item.path, e));
+                    continue;
+                }
+            }
+
+            // Write file
+            match std::fs::write(&path, &item.content) {
+                Ok(_) => {
+                    if item.is_new {
+                        created += 1;
+                    } else {
+                        modified += 1;
+                    }
+                }
+                Err(e) => {
+                    errors.push(format!("{}: {}", item.path, e));
+                }
+            }
+        }
+
+        // Report results
+        if errors.is_empty() {
+            self.chat_messages_mut().push(ChatMessage::assistant(format!(
+                "## Changes Applied\n\n\
+                 - Created: {} files\n\
+                 - Modified: {} files",
+                created, modified
+            )));
+
+            // Advance phase if needed
+            if let Some(ref task) = self.current_task {
+                if task.phase == arq_core::Phase::Planning || task.phase == arq_core::Phase::Agent {
+                    let _ = self.manager.advance_phase(&task_id);
+                    // Refresh current task
+                    if let Ok(updated) = self.manager.get_task(&task_id) {
+                        self.current_task = Some(updated);
+                    }
+                }
+            }
+
+            self.agent_state = AgentState::Complete;
+            self.status_message = Some("Agent complete. Changes applied!".to_string());
+        } else {
+            self.chat_messages_mut().push(ChatMessage::system(format!(
+                "Applied with errors:\n- Created: {}\n- Modified: {}\n- Errors: {}",
+                created,
+                modified,
+                errors.join("\n  ")
+            )));
+            self.agent_state = AgentState::Complete;
+        }
+    }
+
+    /// Discard all agent changes.
+    fn discard_agent_changes(&mut self) {
+        if let AgentState::AwaitingFinalApproval { .. } = &self.agent_state {
+            self.agent_state = AgentState::Idle;
+            self.chat_messages_mut()
+                .push(ChatMessage::system("Changes discarded. Agent cancelled."));
+            self.status_message = Some("Agent cancelled".to_string());
+        }
+    }
+
     /// Handle a key event.
     fn handle_key_event(&mut self, key: KeyEvent, event_tx: mpsc::UnboundedSender<Event>) {
         match self.input_mode {
-            InputMode::Normal => self.handle_normal_mode_key(key),
+            InputMode::Normal => self.handle_normal_mode_key(key, event_tx),
             InputMode::Editing => self.handle_editing_mode_key(key, event_tx),
         }
     }
 
     /// Handle key in normal mode.
-    fn handle_normal_mode_key(&mut self, key: KeyEvent) {
+    fn handle_normal_mode_key(&mut self, key: KeyEvent, event_tx: mpsc::UnboundedSender<Event>) {
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -804,6 +1363,32 @@ impl App {
                 } = std::mem::replace(&mut self.planning_state, PlanningState::Idle)
                 {
                     self.approve_plan(task_id, pending_plan);
+                }
+                // Accept agent item if awaiting review
+                else if matches!(self.agent_state, AgentState::AwaitingReview { .. }) {
+                    self.accept_agent_item(event_tx.clone());
+                }
+                // Apply all changes if awaiting final approval
+                else if matches!(self.agent_state, AgentState::AwaitingFinalApproval { .. }) {
+                    self.apply_agent_changes();
+                }
+            }
+            KeyCode::Char('s') => {
+                // Skip agent item if awaiting review
+                if matches!(self.agent_state, AgentState::AwaitingReview { .. }) {
+                    self.skip_agent_item(event_tx.clone());
+                }
+            }
+            KeyCode::Char('r') => {
+                // Regenerate agent item if awaiting review
+                if matches!(self.agent_state, AgentState::AwaitingReview { .. }) {
+                    self.regenerate_agent_item(event_tx.clone());
+                }
+            }
+            KeyCode::Char('d') => {
+                // Discard changes if awaiting final approval
+                if matches!(self.agent_state, AgentState::AwaitingFinalApproval { .. }) {
+                    self.discard_agent_changes();
                 }
             }
             KeyCode::Char('m') => {
@@ -892,8 +1477,27 @@ impl App {
                 }
             }
             SelectedTab::Agent => {
-                self.chat_messages_mut()
-                    .push(ChatMessage::system("Agent phase not yet implemented."));
+                match &self.agent_state {
+                    AgentState::Idle => {
+                        // Start agent execution
+                        self.start_agent(event_tx);
+                    }
+                    AgentState::AwaitingReview { .. } => {
+                        // User typed feedback - treat as skip for now
+                        self.chat_messages_mut().push(ChatMessage::system(
+                            "Use [a] to accept, [s] to skip, or [r] to regenerate.",
+                        ));
+                    }
+                    AgentState::AwaitingFinalApproval { .. } => {
+                        // User typed feedback
+                        self.chat_messages_mut().push(ChatMessage::system(
+                            "Use [a] to apply changes or [d] to discard.",
+                        ));
+                    }
+                    _ => {
+                        // Generating or complete - ignore input
+                    }
+                }
             }
         }
 
@@ -1254,6 +1858,78 @@ impl App {
                 }
                 Err(error) => {
                     let _ = event_tx.send(Event::PlanningFailed(error));
+                }
+            }
+        });
+    }
+
+    /// Start agent execution from the approved plan.
+    fn start_agent(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
+        // Get current task and plan
+        let task = match &self.current_task {
+            Some(t) => t.clone(),
+            None => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::system("No current task. Create a task first."));
+                return;
+            }
+        };
+
+        let plan = match &task.plan {
+            Some(p) => p.clone(),
+            None => {
+                self.chat_messages_mut().push(ChatMessage::system(
+                    "No plan found. Complete planning first.",
+                ));
+                return;
+            }
+        };
+
+        let task_id = task.id.clone();
+
+        self.is_streaming = true;
+        self.stream_buffer.clear();
+        self.reset_progress_items();
+
+        let total_items = plan.files_to_create.len() + plan.files_to_modify.len();
+
+        if total_items == 0 {
+            self.chat_messages_mut()
+                .push(ChatMessage::system("No items in plan to execute."));
+            self.agent_state = AgentState::Idle;
+            return;
+        }
+
+        self.agent_state = AgentState::Generating;
+        self.status_message = Some(format!("Generating item 1/{}...", total_items));
+
+        // Display plan summary
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "Starting agent execution with {} items to process...\n\
+             Review each item: [a] accept, [s] skip, [r] regenerate",
+            total_items
+        )));
+
+        let config = self.config.clone();
+
+        // Spawn task to generate first item
+        tokio::spawn(async move {
+            match run_single_agent_item(
+                plan,
+                config,
+                task_id.clone(),
+                0, // first item
+                total_items,
+                Vec::new(), // no accepted results yet
+                event_tx.clone(),
+            )
+            .await
+            {
+                Ok(generated) => {
+                    let _ = event_tx.send(Event::AgentGenerated(generated));
+                }
+                Err(error) => {
+                    let _ = event_tx.send(Event::AgentFailed(error));
                 }
             }
         });
@@ -1625,4 +2301,100 @@ async fn run_planning_spec(
     let _ = event_tx.send(Event::PlanningProgress(CorePlanningProgress::Complete));
 
     Ok(plan)
+}
+
+/// Run generation for a single agent item.
+/// Returns the generated code for user review.
+async fn run_single_agent_item(
+    plan: Plan,
+    config: Config,
+    task_id: String,
+    item_index: usize,
+    total_items: usize,
+    _accepted_results: Vec<AcceptedItem>,
+    event_tx: mpsc::UnboundedSender<Event>,
+) -> Result<AgentGeneratedResult, String> {
+    use arq_core::{AgentProgress, ClaudeClient, OpenAIClient, LLM};
+
+    // Send generating progress
+    let item_description = {
+        let items_to_create = plan.files_to_create.len();
+        if item_index < items_to_create {
+            plan.files_to_create[item_index].description.clone()
+        } else {
+            let mod_index = item_index - items_to_create;
+            if mod_index < plan.files_to_modify.len() {
+                plan.files_to_modify[mod_index].description.clone()
+            } else {
+                "Unknown item".to_string()
+            }
+        }
+    };
+
+    let _ = event_tx.send(Event::AgentProgress(AgentProgress::GeneratingCode {
+        item_index,
+        total_items,
+        item_description,
+    }));
+
+    let provider = config.llm.provider.as_str();
+    let model = config.llm.model_or_default();
+    let cwd =
+        std::env::current_dir().map_err(|e| format!("Failed to get current directory: {}", e))?;
+
+    // Create LLM client based on provider
+    let llm: Box<dyn LLM> = match provider {
+        "anthropic" | "claude" => {
+            let api_key = config
+                .llm
+                .api_key_or_env()
+                .ok_or_else(|| "ANTHROPIC_API_KEY not set".to_string())?;
+            Box::new(ClaudeClient::new(api_key).with_model(&model))
+        }
+        "ollama" => {
+            let base_url = config.llm.base_url_or_default();
+            Box::new(OpenAIClient::new(&base_url, "", &model))
+        }
+        _ => {
+            let base_url = config.llm.base_url_or_default();
+            let api_key = config.llm.api_key_or_env().unwrap_or_default();
+            Box::new(OpenAIClient::new(&base_url, &api_key, &model))
+        }
+    };
+
+    // Create executor and advance to the desired item
+    let mut executor = AgentExecutor::new(plan, llm, &cwd);
+
+    // Skip to the correct item index by advancing
+    for _ in 0..item_index {
+        if !executor.is_complete() {
+            // Skip items before the one we want
+            executor.skip_current();
+        }
+    }
+
+    if executor.is_complete() {
+        return Err(format!("Item index {} is out of range", item_index));
+    }
+
+    // Send conformance checking progress
+    let _ = event_tx.send(Event::AgentProgress(AgentProgress::CheckingConformance {
+        item_index,
+    }));
+
+    // Generate code for current item
+    let generated = executor
+        .generate_current()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Send awaiting review progress
+    let _ = event_tx.send(Event::AgentProgress(AgentProgress::AwaitingReview { item_index }));
+
+    Ok(AgentGeneratedResult {
+        task_id,
+        current_index: item_index,
+        total_items,
+        generated,
+    })
 }

@@ -32,6 +32,9 @@ sha2 = "0.10"
 hex = "0.4"
 regex = "1.10"
 
+# Diff generation
+similar = "2.6"
+
 # Rust parsing
 syn = { version = "2.0", features = ["full", "visit", "parsing", "extra-traits"] }
 quote = "1.0"

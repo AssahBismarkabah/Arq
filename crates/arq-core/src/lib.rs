@@ -10,6 +10,10 @@ pub mod research;
 pub mod storage;
 pub mod task;
 
+pub use agent::{
+    AgentError, AgentExecutor, AgentProgress, ChangeApplier, CodeGenerator, ConformanceChecker,
+    DiffGenerator, ExecutionSummary, FileOperation, GeneratedCode,
+};
 pub use config::{
     Config, ConfigError, ContextConfig, KnowledgeConfig, LLMConfig, ResearchConfig, StorageConfig,
 };

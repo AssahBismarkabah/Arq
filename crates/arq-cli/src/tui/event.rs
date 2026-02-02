@@ -5,7 +5,10 @@ use futures::{FutureExt, StreamExt};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use arq_core::{ApproachOptions, Plan, PlanningProgress, ResearchDoc, ResearchProgress};
+use arq_core::{
+    AgentProgress, ApproachOptions, ExecutionSummary, GeneratedCode, Plan, PlanningProgress,
+    ResearchDoc, ResearchProgress,
+};
 
 /// Result of a completed research task.
 #[derive(Debug, Clone)]
@@ -34,6 +37,29 @@ pub struct PlanningResult {
     pub plan: Plan,
 }
 
+/// Result of agent code generation for one item.
+#[derive(Debug, Clone)]
+pub struct AgentGeneratedResult {
+    /// The task ID
+    pub task_id: String,
+    /// Current item index (0-based)
+    pub current_index: usize,
+    /// Total number of items
+    pub total_items: usize,
+    /// The generated code with conformance info
+    pub generated: GeneratedCode,
+}
+
+/// Result of agent execution completion (all changes applied).
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Will be used for async change application
+pub struct AgentCompleteResult {
+    /// The task ID
+    pub task_id: String,
+    /// Summary of changes applied
+    pub summary: ExecutionSummary,
+}
+
 /// Events that can occur in the application.
 #[derive(Debug, Clone)]
 pub enum Event {
@@ -59,6 +85,15 @@ pub enum Event {
     PlanningComplete(PlanningResult),
     /// Planning failed with error message
     PlanningFailed(String),
+    /// Agent progress update
+    AgentProgress(AgentProgress),
+    /// Agent generated code for one item - awaiting user review
+    AgentGenerated(AgentGeneratedResult),
+    /// Agent execution completed (for async change application)
+    #[allow(dead_code)]
+    AgentComplete(AgentCompleteResult),
+    /// Agent execution failed
+    AgentFailed(String),
 }
 
 /// Handles events from various sources.
