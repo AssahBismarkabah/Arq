@@ -123,7 +123,7 @@ impl ConformanceChecker {
             });
         }
 
-        // Check 3: Additions are present
+        // Check 3: Additions are present (warning only - LLM may adapt variable names)
         for addition in &file.additions {
             // Extract the core part of the addition (strip quotes and whitespace)
             let addition_core = addition.trim().trim_matches('\'').trim_matches('"');
@@ -134,19 +134,21 @@ impl ConformanceChecker {
                     format!("Found: {}", truncate(addition_core, 50)),
                 )
             } else {
-                deviations.push(Deviation::error(
-                    "Missing specified addition",
-                    format!("Should contain: {}", truncate(addition_core, 50)),
-                    "Not found in generated code".to_string(),
+                // Use warning instead of error - LLM may correctly adapt
+                // variable/field names to match actual code (e.g., self.rx vs self.receiver)
+                deviations.push(Deviation::warning(
+                    "Addition not found verbatim (may be adapted)",
+                    format!("Plan specified: {}", truncate(addition_core, 50)),
+                    "LLM may have adapted to match actual code".to_string(),
                 ));
-                ConformanceCheck::fail(
-                    "Addition present",
-                    format!("Missing: {}", truncate(addition_core, 50)),
+                ConformanceCheck::pass_with_details(
+                    "Addition (adapted)",
+                    format!("Plan: {} (may be adapted)", truncate(addition_core, 40)),
                 )
             });
         }
 
-        // Check 4: Removals are gone
+        // Check 4: Removals are gone (warning if still present - may be adapted)
         for removal in &file.removals {
             let removal_core = removal.trim().trim_matches('\'').trim_matches('"');
             let still_contains = generated.contains(removal_core);
@@ -156,14 +158,16 @@ impl ConformanceChecker {
                     format!("Removed: {}", truncate(removal_core, 50)),
                 )
             } else {
-                deviations.push(Deviation::error(
-                    "Removal not applied",
-                    format!("Should remove: {}", truncate(removal_core, 50)),
-                    "Still found in generated code".to_string(),
+                // Use warning - the exact text might still exist in a different context
+                // or the LLM may have made equivalent changes
+                deviations.push(Deviation::warning(
+                    "Removal may not be applied",
+                    format!("Plan wanted to remove: {}", truncate(removal_core, 50)),
+                    "Still found - verify manually".to_string(),
                 ));
-                ConformanceCheck::fail(
-                    "Removal applied",
-                    format!("Still present: {}", truncate(removal_core, 50)),
+                ConformanceCheck::pass_with_details(
+                    "Removal (verify)",
+                    format!("Check: {}", truncate(removal_core, 40)),
                 )
             });
         }

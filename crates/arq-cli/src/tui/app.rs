@@ -8,9 +8,9 @@ use tokio::sync::mpsc;
 
 use arq_core::{
     AgentExecutor, AgentProgress as CoreAgentProgress, Approach, ApproachOptions, Config,
-    ContextBuilder, FileOperation, FileStorage, GeneratedCode, KnowledgeGraph, KnowledgeStore,
-    Plan, PlanningProgress, PlanningRunner, ResearchDoc, ResearchProgress, ResearchRunner, Task,
-    TaskManager,
+    ContextBuilder, DiffGenerator, FileOperation, FileStorage, GeneratedCode, KnowledgeGraph,
+    KnowledgeStore, Plan, PlanningProgress, PlanningRunner, ResearchDoc, ResearchProgress,
+    ResearchRunner, Task, TaskManager,
 };
 
 use super::event::{
@@ -481,7 +481,8 @@ impl App {
                             ResearchState::Researching | ResearchState::Refining { .. }
                         ) || matches!(
                             self.planning_state,
-                            PlanningState::GeneratingApproaches | PlanningState::GeneratingPlan { .. }
+                            PlanningState::GeneratingApproaches
+                                | PlanningState::GeneratingPlan { .. }
                         );
 
                         if !is_research_or_planning && !self.stream_buffer.is_empty() {
@@ -836,16 +837,35 @@ impl App {
             item_num, total, op_type
         )));
 
-        // Display generated code with syntax highlighting hint
-        let extension = std::path::Path::new(&result.generated.file_path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("txt");
+        // Generate and display diff instead of full content
+        let diff_generator = DiffGenerator::new();
+        let file_path = &result.generated.file_path;
 
-        let content = format!(
-            "**File:** `{}`\n\n```{}\n{}\n```",
-            result.generated.file_path, extension, result.generated.content
-        );
+        let (diff_content, summary) = match &result.generated.operation {
+            FileOperation::Create => {
+                let diff = diff_generator.generate_create(file_path, &result.generated.content);
+                let summary = diff_generator.summary(&diff);
+                let unified =
+                    diff_generator.format_unified(file_path, "", &result.generated.content);
+                (unified, summary)
+            }
+            FileOperation::Modify { original } => {
+                let diff = diff_generator.generate(file_path, original, &result.generated.content);
+                let summary = diff_generator.summary(&diff);
+                let unified =
+                    diff_generator.format_unified(file_path, original, &result.generated.content);
+                (unified, summary)
+            }
+            FileOperation::Delete => {
+                let diff = diff_generator.generate_delete(file_path, &result.generated.content);
+                let summary = diff_generator.summary(&diff);
+                let unified =
+                    diff_generator.format_unified(file_path, &result.generated.content, "");
+                (unified, summary)
+            }
+        };
+
+        let content = format!("**{}**\n\n```diff\n{}\n```", summary, diff_content.trim());
         self.chat_messages_mut()
             .push(ChatMessage::assistant(&content));
 

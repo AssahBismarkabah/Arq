@@ -120,6 +120,7 @@ impl<'a> Highlighter<'a> {
             "sh" | "bash" | "zsh" => "shell",
             "md" => "markdown",
             "dockerfile" => "docker",
+            "diff" | "patch" => "Diff",
             _ => return None,
         };
 
