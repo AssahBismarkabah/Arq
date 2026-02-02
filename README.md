@@ -106,46 +106,111 @@ Create an optional `arq.toml` in your project root to customize Arq's behavior:
 
 ```toml
 [llm]
-provider = "openai"
+provider = "openai"          # openai, anthropic, ollama, openrouter
 model = "gpt-4o"
-available_models = [
+base_url = "https://api.openai.com/v1"  # Optional: custom endpoint
+max_tokens = 8192            # Max tokens for LLM responses
+available_models = [         # Models shown in TUI selector
     "gpt-4o",
     "gpt-4o-mini",
     "o1-preview"
 ]
 
 [context]
-max_file_size = 102400  # 100KB
+max_file_size = 102400       # 100KB - skip files larger than this
+max_total_size = 512000      # 500KB - total context budget
 include_extensions = [
-    "rs",
-    "ts",
-    "py",
-    "go",
-    "java",
-    "cs"
+    "rs", "ts", "py", "go", "java", "cs"
 ]
 exclude_dirs = [
-    "node_modules",
-    "target",
-    ".git",
-    "dist"
+    "node_modules", "target", ".git", "dist"
+]
+exclude_patterns = [
+    "*.lock", "*.min.js", "*.map"
 ]
 
+[storage]
+data_dir = "~/.arq"          # Where Arq stores task data
+
+[research]
+# Custom system prompt for the research phase (optional)
+# system_prompt = "You are a code analyst..."
+
 [knowledge]
-db_path = "knowledge.db"
-search_limit = 20
+db_path = "knowledge.db"     # Knowledge graph database location
+embedding_model = "Xenova/bge-small-en-v1.5"  # See supported models below
+max_chunk_size = 1000        # Characters per chunk (larger = more context)
+chunk_overlap = 100          # Overlap between chunks
+search_limit = 20            # Max semantic search results
 ```
 
 ### Configuration Reference
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
-| `[llm]` | `provider` | `openai` | `openai`, `anthropic`, `ollama` |
-| | `model` | `gpt-4o` | Primary model for generation |
-| | `available_models` | — | Models for TUI selector |
-| `[context]` | `include_extensions` | — | File types to index |
-| `[knowledge]` | `db_path` | `knowledge.db` | Local database location |
-| | `embedding_model` | `BGESmallENV15` | Local embedding model used |
+| `[llm]` | `provider` | `openai` | Provider: `openai`, `anthropic`, `ollama`, `openrouter` |
+| `[llm]` | `model` | Provider default | Model name (e.g., `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `[llm]` | `base_url` | Provider default | API endpoint URL |
+| `[llm]` | `api_key` | From env | API key (prefer env vars: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) |
+| `[llm]` | `max_tokens` | `8192` | Maximum tokens for LLM responses |
+| `[llm]` | `api_version` | `2023-06-01` | API version (Anthropic only) |
+| `[llm]` | `available_models` | `[]` | Models to show in TUI model selector |
+| `[context]` | `max_file_size` | `102400` | Skip files larger than this (bytes) |
+| `[context]` | `max_total_size` | `512000` | Total context size budget (bytes) |
+| `[context]` | `include_extensions` | Many | File extensions to include (without dot) |
+| `[context]` | `exclude_dirs` | Many | Directories to skip (e.g., `node_modules`) |
+| `[context]` | `exclude_patterns` | Many | Glob patterns to exclude (e.g., `*.lock`) |
+| `[storage]` | `data_dir` | `~/.arq` | Base directory for Arq data |
+| `[storage]` | `tasks_dir` | `tasks` | Subdirectory for task metadata |
+| `[research]` | `system_prompt` | Built-in | Custom system prompt for research LLM calls |
+| `[knowledge]` | `db_path` | `knowledge.db` | Database file location (relative to project dir) |
+| `[knowledge]` | `embedding_model` | `Xenova/bge-small-en-v1.5` | Embedding model for semantic search (see below) |
+| `[knowledge]` | `max_chunk_size` | `1000` | Max characters per code chunk for indexing |
+| `[knowledge]` | `chunk_overlap` | `100` | Overlap between chunks (preserves context) |
+| `[knowledge]` | `search_limit` | `20` | Max search results for semantic queries |
+
+**Note:** Changing `embedding_model` requires re-indexing: `arq init --force`
+
+### Supported Embedding Models
+
+| Model Code | Dimensions | Description |
+|------------|------------|-------------|
+| `Xenova/bge-small-en-v1.5` | 384 | **Default** - Fast English model, optimized for code |
+| `Xenova/bge-base-en-v1.5` | 768 | Base English model |
+| `Xenova/bge-large-en-v1.5` | 1024 | Large English model (higher accuracy) |
+| `jinaai/jina-embeddings-v2-base-code` | 768 | Specialized for code search |
+| `nomic-ai/nomic-embed-text-v1.5` | 768 | 8192 context length |
+| `intfloat/multilingual-e5-small` | 384 | Multilingual support |
+| `intfloat/multilingual-e5-base` | 768 | Multilingual support |
+| `Xenova/bge-small-zh-v1.5` | 512 | Chinese language model |
+| `Xenova/bge-large-zh-v1.5` | 1024 | Chinese language model |
+
+Quantized variants (smaller, faster) are available by adding `-onnx-Q` suffix or using `model_quantized.onnx`.
+
+### Environment Variables
+
+Arq supports environment variable overrides:
+
+```bash
+# LLM Configuration
+export ARQ_LLM_PROVIDER="anthropic"
+export ARQ_LLM_MODEL="claude-sonnet-4-20250514"
+export ARQ_LLM_BASE_URL="https://api.anthropic.com/v1/messages"
+export ARQ_LLM_API_KEY="your-key"
+export ARQ_LLM_MAX_TOKENS="8192"
+
+# Provider-specific keys (fallback)
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export OPENROUTER_API_KEY="sk-or-..."
+
+# Context limits
+export ARQ_MAX_FILE_SIZE="102400"
+export ARQ_MAX_TOTAL_SIZE="512000"
+
+# Storage
+export ARQ_DATA_DIR="~/.arq"
+```
 
 ---
 
