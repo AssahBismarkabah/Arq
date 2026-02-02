@@ -772,10 +772,14 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => {
                 self.scroll_up(3);
             }
-            KeyCode::PageDown | KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::PageDown | KeyCode::Char('d')
+                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
                 self.scroll_down(15);
             }
-            KeyCode::PageUp | KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::PageUp | KeyCode::Char('u')
+                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
                 self.scroll_up(15);
             }
             KeyCode::Home | KeyCode::Char('g') => {
