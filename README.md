@@ -1,60 +1,24 @@
-![Arq](assets/Arq.png)
+<p align="center">
+  <img src="assets/Arq.png" alt="Arq" width="400">
+</p>
 
-![GitHub Release](https://img.shields.io/github/v/release/AssahBismarkabah/Arq?label=latest%20release)
-[![CI](https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml/badge.svg)](https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml)
-[![Release](https://github.com/AssahBismarkabah/Arq/actions/workflows/release.yml/badge.svg)](https://github.com/AssahBismarkabah/Arq/actions/workflows/release.yml)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-![GitHub Repo stars](https://img.shields.io/github/stars/AssahBismarkabah/Arq?style=flat)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/AssahBismarkabah/Arq)
+<p align="center">
+  <strong>Spec-first AI coding agent with deep codebase understanding</strong>
+</p>
 
-# Spec-first AI agent
-
-Arq is a next-generation AI coding engine designed for deep codebase understanding and high-precision ai assisted development. Unliketraditional AI coding tools that rely on simple RAG (Retrieval-Augmented Generation), 
-
-Arq builds a comprehensive ** Knowlege Graph** of your project, enabling it to reason about architectural patterns, dependencies, andcross-file impacts before enabling you to make technically sound decisions before writing a single line of code.
+<p align="center">
+  <a href="https://github.com/AssahBismarkabah/Arq/releases"><img src="https://img.shields.io/github/v/release/AssahBismarkabah/Arq?label=release" alt="Release"></a>
+  <a href="https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml"><img src="https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
+</p>
 
 
-## 🏗 Philosophy: The Three-Phase Workflow
+Arq builds a **Knowledge Graph** of your codebase, enabling it to reason about architectural patterns, dependencies, and cross-file impacts before writing code. Unlike traditional AI tools that rely on simple RAG, Arq ensures technically sound decisions through a disciplined three-phase workflow.
 
-Arq enforces a disciplined, spec-driven engineering process to eliminate hallucinations and ensure technical correctness.
+arq Analyzes the codebase to validate feasibility, identify patterns, and map dependencies , Generates a detailed technical specification and execution plan, Executes the approved plan, respecting existing architecture and idioms.
 
-1.  **Research**: Arq analyzes the codebase using its knowledge graph to validate the feasibility of a task, identify relevant patterns, and map out dependencies.
-2.  **Planning**: Based on the research, Arq generates a detailed technical specification and execution plan.
-3.  **Implementation**: An autonomous agent executes the approved plan, producing code that respects the project's existing architecture and idioms.
 
----
-
-## Core Technologies
-
-### Semantic Knowledge Graph
-Built on **SurrealDB**, Arq's knowledge graph goes beyond simple text chunks. It uses **Tree-sitter** to parse your code into a rich ontology of entities:
-*   **Structural Nodes**: Files, Modules, Structs, Traits, Enums.
-*   **Behavioral Nodes**: Functions, Methods, Constants.
-*   **Relational Edges**: `Calls`, `DependsOn`, `Implements`, `Contains`.
-
-### Smart Context Gathering
-Instead of flooding the LLM with irrelevant files, Arq's **Smart Context** algorithm:
-1.  Performs **semantic vector search** to find relevant code entry points.
-2.  Traverses the **knowledge graph** to pull in critical dependencies and upstream callers.
-3.  Synthesizes a "context package" that gives the LLM a 360-degree view of the target logic.
-
-### Local-First & High Performance
-*   **Rust-powered core** for maximum efficiency.
-*   **Local Vector Embeddings** (BGE-Small) ensure your code stays private.
-*   **RocksDB storage** for lightning-fast graph queries.
-
----
-
-## Key Features
-
-*   **Multi-Language Support**: Native parsing for **Rust, TypeScript, JavaScript, Python, Go, Java, and C#**.
-*   **Interactive TUI**: A terminal-based collaborative environment for real-time task management.
-*   **Graph Visualizer**: A web-based interactive tool to explore your project's architecture and the AI's internal representation.
-*   **Spec-Driven**: Ensures deep understanding before generation, reducing iteration loops.
-
----
-
-## 📦 Installation
+## Installation
 
 ### Quick Install (macOS/Linux)
 ```bash
@@ -71,9 +35,7 @@ irm https://github.com/AssahBismarkabah/Arq/releases/latest/download/arq-install
 brew install AssahBismarkabah/tap/arq
 ```
 
----
-
-##  Getting Started
+## Getting Started
 
 1. **Configure your LLM provider**:
    ```bash
@@ -97,8 +59,6 @@ brew install AssahBismarkabah/tap/arq
    arq advance   # Phase 2: Create execution plan
    arq advance   # Phase 3: Generate code
    ```
-
----
 
 ## Configuration
 
@@ -212,9 +172,7 @@ export ARQ_MAX_TOTAL_SIZE="512000"
 export ARQ_DATA_DIR="~/.arq"
 ```
 
----
-
-## 🛠 CLI Commands
+## CLI Commands
 
 | Command | Description |
 |---------|-------------|
@@ -232,12 +190,10 @@ export ARQ_DATA_DIR="~/.arq"
 | `switch` | Switch the active context to a different task |
 | `delete` | Remove a task and its associated artifacts |
 
----
-
 ## Contributing
 
-We welcome contributions! Please see our [GitHub Issues](https://github.com/AssahBismarkabah/Arq/issues) for bug reports and feature requests.
+Contributions welcome. See [GitHub Issues](https://github.com/AssahBismarkabah/Arq/issues) for bug reports and feature requests.
 
-## 📄 License
+## License
 
-Arq is released under the [Apache License 2.0](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE) for details.
