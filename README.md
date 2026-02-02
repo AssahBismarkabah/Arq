@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/Arq.png" alt="Arq" width="400">
+  <img src="assets/Arq.png" alt="Arq">
 </p>
 
 <p align="center">
@@ -10,6 +10,10 @@
   <a href="https://github.com/AssahBismarkabah/Arq/releases"><img src="https://img.shields.io/github/v/release/AssahBismarkabah/Arq?label=release" alt="Release"></a>
   <a href="https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml"><img src="https://github.com/AssahBismarkabah/Arq/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/AssahBismarkabah/Arq/stargazers"><img src="https://img.shields.io/github/stars/AssahBismarkabah/Arq?style=flat" alt="Stars"></a>
+  <a href="https://github.com/AssahBismarkabah/Arq/commits"><img src="https://img.shields.io/github/commit-activity/m/AssahBismarkabah/Arq" alt="Commits"></a>
+  <img src="https://img.shields.io/github/languages/top/AssahBismarkabah/Arq" alt="Language">
+  <img src="https://img.shields.io/github/repo-size/AssahBismarkabah/Arq" alt="Repo Size">
 </p>
 
 
