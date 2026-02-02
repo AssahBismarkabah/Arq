@@ -372,46 +372,56 @@ impl<L: LLM> ResearchRunner<L> {
         // Strip markdown code block if present
         let json_str = extract_json(response);
 
-        // Try to parse as JSON
-        let parsed: ResearchResponse = serde_json::from_str(json_str).map_err(|e| {
-            ResearchError::ParseError(format!(
-                "Failed to parse LLM response as JSON: {}. Response: {}",
-                e,
-                &json_str[..json_str.len().min(500)]
-            ))
-        })?;
+        // Try to parse as JSON, fallback to raw text if parsing fails
+        match serde_json::from_str::<ResearchResponse>(json_str) {
+            Ok(parsed) => {
+                // Convert to ResearchDoc
+                let mut doc = ResearchDoc::new(task_name);
+                doc.summary = parsed.summary;
+                doc.suggested_approach = parsed.suggested_approach;
 
-        // Convert to ResearchDoc
-        let mut doc = ResearchDoc::new(task_name);
-        doc.summary = parsed.summary;
-        doc.suggested_approach = parsed.suggested_approach;
+                // Convert findings
+                doc.codebase_analysis = parsed
+                    .findings
+                    .into_iter()
+                    .map(|f| Finding {
+                        title: f.title,
+                        description: f.description,
+                        related_files: f.related_files,
+                    })
+                    .collect();
 
-        // Convert findings
-        doc.codebase_analysis = parsed
-            .findings
-            .into_iter()
-            .map(|f| Finding {
-                title: f.title,
-                description: f.description,
-                related_files: f.related_files,
-            })
-            .collect();
+                // Convert dependencies
+                doc.dependencies = parsed
+                    .dependencies
+                    .into_iter()
+                    .map(|d| Dependency {
+                        name: d.name,
+                        description: d.description,
+                        is_external: d.is_external,
+                    })
+                    .collect();
 
-        // Convert dependencies
-        doc.dependencies = parsed
-            .dependencies
-            .into_iter()
-            .map(|d| Dependency {
-                name: d.name,
-                description: d.description,
-                is_external: d.is_external,
-            })
-            .collect();
+                // Use provided sources
+                doc.sources = sources;
 
-        // Use provided sources
-        doc.sources = sources;
+                Ok(doc)
+            }
+            Err(_) => {
+                // Fallback: LLM returned non-JSON response, wrap it in a basic doc
+                let mut doc = ResearchDoc::new(task_name);
+                doc.summary = "Analysis completed (raw response from LLM)".to_string();
+                doc.suggested_approach = String::new();
+                doc.codebase_analysis = vec![Finding {
+                    title: "LLM Analysis".to_string(),
+                    description: response.trim().to_string(),
+                    related_files: sources.iter().map(|s| s.location.clone()).collect(),
+                }];
+                doc.sources = sources;
 
-        Ok(doc)
+                Ok(doc)
+            }
+        }
     }
 }
 

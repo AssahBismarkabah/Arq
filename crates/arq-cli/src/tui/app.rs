@@ -2208,19 +2208,15 @@ async fn run_research_task(
                 .map_err(|e| format!("Research failed: {}", e))?
         }
         _ => {
-            // OpenAI or OpenAI-compatible (use non-streaming for compatibility)
+            // OpenAI or OpenAI-compatible (use streaming - required for max_tokens > 4096)
             let base_url = config.llm.base_url_or_default();
             let api_key = config.llm.api_key_or_env().unwrap_or_default();
             let client = OpenAIClient::new(&base_url, &api_key, &model).with_max_tokens(max_tokens);
             let runner = create_runner!(client);
-            // Use non-streaming for better compatibility with various providers
-            let doc = runner
-                .run_with_progress(&task, progress_tx)
+            runner
+                .run_streaming(&task, progress_tx, stream_tx)
                 .await
-                .map_err(|e| format!("Research failed: {}", e))?;
-            // Send done signal to stream
-            let _ = stream_tx.send(StreamChunk::done());
-            doc
+                .map_err(|e| format!("Research failed: {}", e))?
         }
     };
 
