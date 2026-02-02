@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
 };
 
-use crate::tui::app::{App, MessageRole};
+use crate::tui::app::{App, MessageRole, PlanningState, ResearchState};
 use crate::tui::highlight::{highlight_markdown, Highlighter};
 
 /// Wrap text to fit within a given width.
@@ -145,8 +145,16 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
         }
     }
 
-    // Add streaming buffer if active
-    if app.is_streaming && !app.stream_buffer.is_empty() {
+    // Add streaming buffer if active (but not during research/planning which shows raw JSON)
+    let is_research_or_planning = matches!(
+        app.research_state,
+        ResearchState::Researching | ResearchState::Refining { .. }
+    ) || matches!(
+        app.planning_state,
+        PlanningState::GeneratingApproaches | PlanningState::GeneratingPlan { .. }
+    );
+
+    if app.is_streaming && !app.stream_buffer.is_empty() && !is_research_or_planning {
         let mut highlighter = Highlighter::new();
 
         for (i, line) in app.stream_buffer.lines().enumerate() {

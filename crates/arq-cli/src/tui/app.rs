@@ -192,7 +192,7 @@ impl MessageRole {
         match self {
             Self::User => "You",
             Self::Assistant => "Arq",
-            Self::System => "System",
+            Self::System => "Arq",
         }
     }
 }
@@ -474,10 +474,22 @@ impl App {
                         self.stream_buffer.push_str(&text);
                     }
                     Event::StreamComplete => {
-                        if !self.stream_buffer.is_empty() {
+                        // Don't add raw stream buffer for research/planning - those have special handlers
+                        // that display formatted output instead of raw JSON
+                        let is_research_or_planning = matches!(
+                            self.research_state,
+                            ResearchState::Researching | ResearchState::Refining { .. }
+                        ) || matches!(
+                            self.planning_state,
+                            PlanningState::GeneratingApproaches | PlanningState::GeneratingPlan { .. }
+                        );
+
+                        if !is_research_or_planning && !self.stream_buffer.is_empty() {
                             let content = std::mem::take(&mut self.stream_buffer);
                             self.chat_messages_mut()
                                 .push(ChatMessage::assistant(content));
+                        } else {
+                            self.stream_buffer.clear();
                         }
                         self.is_streaming = false;
                     }
@@ -580,6 +592,8 @@ impl App {
     /// Handle research completion - await user validation before saving.
     fn handle_research_complete(&mut self, result: ResearchResult) {
         self.is_streaming = false;
+        // Clear the stream buffer - we'll show the formatted doc instead of raw JSON
+        self.stream_buffer.clear();
 
         // Use the document's built-in markdown formatting for complete display
         let content = result.doc.to_markdown();
