@@ -227,7 +227,8 @@ fn generate_hint(content: &str, search: &str) -> String {
 
     // Check if trimmed version exists
     if content.contains(trimmed_search) && trimmed_search != search {
-        return "\n  Hint: The trimmed text was found. Check leading/trailing whitespace.".to_string();
+        return "\n  Hint: The trimmed text was found. Check leading/trailing whitespace."
+            .to_string();
     }
 
     // Check for line ending issues
