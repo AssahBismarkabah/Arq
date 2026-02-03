@@ -91,3 +91,83 @@ fn test_custom_config() {
         .join("metadata.json");
     assert!(custom_path.exists());
 }
+
+// ============================================================================
+// Project Memory Tests
+// ============================================================================
+
+#[test]
+fn test_project_memory_save_and_load() {
+    let (storage, _temp, _config) = create_test_storage();
+
+    // Initially no memory
+    assert!(storage.load_project_memory().unwrap().is_none());
+
+    // Save memory
+    let memory = "# Project Memory\n\n## Architecture\nThis is a test project.";
+    storage.save_project_memory(memory).unwrap();
+
+    // Load and verify
+    let loaded = storage.load_project_memory().unwrap();
+    assert!(loaded.is_some());
+    assert_eq!(loaded.unwrap(), memory);
+}
+
+#[test]
+fn test_project_memory_empty_content() {
+    let (storage, _temp, _config) = create_test_storage();
+
+    // Save empty/whitespace memory
+    storage.save_project_memory("   \n   ").unwrap();
+
+    // Should return None for empty content
+    assert!(storage.load_project_memory().unwrap().is_none());
+}
+
+#[test]
+fn test_task_memory_save_and_load() {
+    let (storage, _temp, _config) = create_test_storage();
+
+    let task = Task::new("Test task with memory");
+    storage.save_task(&task).unwrap();
+
+    // Initially no memory
+    assert!(storage.load_task_memory(&task.id).unwrap().is_none());
+
+    // Save task memory
+    let memory = "## Task Notes\nFound relevant code in src/lib.rs";
+    storage.save_task_memory(&task.id, memory).unwrap();
+
+    // Load and verify
+    let loaded = storage.load_task_memory(&task.id).unwrap();
+    assert!(loaded.is_some());
+    assert_eq!(loaded.unwrap(), memory);
+}
+
+#[test]
+fn test_task_memory_independent_per_task() {
+    let (storage, _temp, _config) = create_test_storage();
+
+    let task1 = Task::new("Task 1");
+    let task2 = Task::new("Task 2");
+    storage.save_task(&task1).unwrap();
+    storage.save_task(&task2).unwrap();
+
+    // Save different memories
+    storage
+        .save_task_memory(&task1.id, "Memory for task 1")
+        .unwrap();
+    storage
+        .save_task_memory(&task2.id, "Memory for task 2")
+        .unwrap();
+
+    // Verify they are independent
+    assert_eq!(
+        storage.load_task_memory(&task1.id).unwrap().unwrap(),
+        "Memory for task 1"
+    );
+    assert_eq!(
+        storage.load_task_memory(&task2.id).unwrap().unwrap(),
+        "Memory for task 2"
+    );
+}

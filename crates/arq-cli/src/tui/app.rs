@@ -7,10 +7,11 @@ use std::io::Stdout;
 use tokio::sync::mpsc;
 
 use arq_core::{
-    AgentExecutor, AgentProgress as CoreAgentProgress, Approach, ApproachOptions, Config,
-    ContextBuilder, DiffGenerator, FileOperation, FileStorage, GeneratedCode, KnowledgeGraph,
-    KnowledgeStore, Plan, PlanningProgress, PlanningRunner, ResearchDoc, ResearchProgress,
-    ResearchRunner, Task, TaskManager,
+    AgentExecutor, AgentLoopConfig, AgentLoopProgress, AgentLoopRunner,
+    AgentProgress as CoreAgentProgress, Approach, ApproachOptions, Config, ContextBuilder,
+    DiffGenerator, FileOperation, FileStorage, GeneratedCode, KnowledgeGraph, KnowledgeStore, Plan,
+    PlanningProgress, PlanningRunner, ResearchDoc, ResearchProgress, ResearchRunner, Task,
+    TaskManager, ToolConfirmation,
 };
 
 use super::event::{
@@ -116,9 +117,9 @@ pub enum AgentState {
     /// No agent activity
     #[default]
     Idle,
-    /// Generating code for current item
+    /// Generating code for current item (legacy flow)
     Generating,
-    /// Awaiting user review of generated code
+    /// Awaiting user review of generated code (legacy flow)
     AwaitingReview {
         task_id: String,
         current_index: usize,
@@ -127,13 +128,20 @@ pub enum AgentState {
         /// Accumulated results from previous items
         accepted_results: Vec<AcceptedItem>,
     },
-    /// All items reviewed, awaiting final approval to apply
+    /// All items reviewed, awaiting final approval to apply (legacy flow)
     AwaitingFinalApproval {
         task_id: String,
         accepted_results: Vec<AcceptedItem>,
     },
     /// Changes applied successfully
     Complete,
+    /// Agentic loop is running
+    AgentLoopRunning { current_action: String },
+    /// Agentic loop awaiting tool confirmation
+    AgentLoopAwaitingConfirmation {
+        tool_name: String,
+        request_id: String,
+    },
 }
 
 /// An accepted item ready to be applied.
@@ -291,6 +299,10 @@ pub struct App {
     /// Knowledge graph for semantic search (initialized lazily, for future TUI integration)
     #[allow(dead_code)]
     pub knowledge_graph: Option<std::sync::Arc<KnowledgeGraph>>,
+    /// Sender for agentic loop tool confirmations
+    pub agent_loop_confirmation_tx: Option<mpsc::UnboundedSender<ToolConfirmation>>,
+    /// Files backed up during agent loop (original path -> backup path)
+    pub agent_backed_up_files: Vec<(String, String)>,
 }
 
 impl App {
@@ -340,6 +352,8 @@ impl App {
             selected_model_index,
             tick_count: 0,
             knowledge_graph: None, // Initialized lazily during first research
+            agent_loop_confirmation_tx: None,
+            agent_backed_up_files: Vec::new(),
         };
 
         // Restore state from current task
@@ -526,6 +540,35 @@ impl App {
                     }
                     Event::AgentFailed(error) => {
                         self.handle_agent_failed(error);
+                    }
+                    Event::AgentLoop(progress) => {
+                        self.handle_agent_loop_progress(progress);
+                    }
+                    Event::AgentToolConfirmation {
+                        tool_name,
+                        args,
+                        request_id,
+                    } => {
+                        self.handle_agent_tool_confirmation(tool_name, args, request_id);
+                    }
+                    Event::AgentLoopComplete {
+                        summary,
+                        files_changed,
+                    } => {
+                        self.handle_agent_loop_complete(summary, files_changed);
+                    }
+                    Event::FilesRolledBack { count, files } => {
+                        self.chat_messages_mut().push(ChatMessage::system(format!(
+                            "Successfully rolled back {} file(s): {}",
+                            count,
+                            files.join(", ")
+                        )));
+                        self.status_message = Some(format!("Rolled back {} files", count));
+                    }
+                    Event::RollbackFailed(error) => {
+                        self.chat_messages_mut()
+                            .push(ChatMessage::system(format!("Rollback failed: {}", error)));
+                        self.status_message = Some("Rollback failed".to_string());
                     }
                 }
             }
@@ -941,6 +984,237 @@ impl App {
             if item.status == ProgressStatus::InProgress {
                 item.status = ProgressStatus::Failed;
                 break;
+            }
+        }
+    }
+
+    /// Handle agentic loop progress updates.
+    fn handle_agent_loop_progress(&mut self, progress: AgentLoopProgress) {
+        match progress {
+            AgentLoopProgress::Started { plan_summary } => {
+                self.set_progress_status(0, ProgressStatus::InProgress);
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Agent started: {}",
+                    plan_summary
+                )));
+            }
+            AgentLoopProgress::Thinking { iteration } => {
+                if let AgentState::AgentLoopRunning {
+                    ref mut current_action,
+                    ..
+                } = self.agent_state
+                {
+                    *current_action = format!("Thinking... (iteration {})", iteration);
+                }
+            }
+            AgentLoopProgress::Retrying {
+                attempt,
+                max_attempts,
+                reason,
+            } => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Retrying ({}/{})... Reason: {}",
+                    attempt, max_attempts, reason
+                )));
+            }
+            AgentLoopProgress::ToolRequested {
+                tool_name,
+                args_preview,
+            } => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::assistant(format!(
+                        "Calling tool: {}\n{}",
+                        tool_name, args_preview
+                    )));
+            }
+            AgentLoopProgress::AwaitingConfirmation {
+                tool_name,
+                args,
+                request_id,
+            } => {
+                // This will be handled by Event::AgentToolConfirmation
+                self.handle_agent_tool_confirmation(tool_name, args, request_id);
+            }
+            AgentLoopProgress::ToolExecuted {
+                tool_name,
+                success,
+                output_preview,
+            } => {
+                let status = if success { "success" } else { "failed" };
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Tool {} ({}): {}",
+                    tool_name, status, output_preview
+                )));
+            }
+            AgentLoopProgress::FileBackedUp { original, backup } => {
+                self.agent_backed_up_files
+                    .push((original.clone(), backup.clone()));
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Backed up {} -> {}",
+                    original, backup
+                )));
+            }
+            AgentLoopProgress::TextChunk { content } => {
+                // Streaming chunk - append to stream buffer
+                self.stream_buffer.push_str(&content);
+            }
+            AgentLoopProgress::TextResponse { content } => {
+                self.chat_messages_mut()
+                    .push(ChatMessage::assistant(&content));
+            }
+            AgentLoopProgress::Complete {
+                summary,
+                files_changed,
+            } => {
+                self.handle_agent_loop_complete(summary, files_changed);
+            }
+            AgentLoopProgress::Error { message } => {
+                self.handle_agent_failed(message);
+            }
+            AgentLoopProgress::ContextTruncated { removed_messages } => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Context truncated: removed {} old messages",
+                    removed_messages
+                )));
+            }
+            AgentLoopProgress::FilesRolledBack { count, files } => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Rolled back {} file(s): {}",
+                    count,
+                    files.join(", ")
+                )));
+                // Clear the backed up files list since we've restored them
+                self.agent_backed_up_files.clear();
+            }
+            AgentLoopProgress::SessionResumed {
+                iteration,
+                message_count,
+            } => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Resumed session from iteration {} ({} messages in history)",
+                    iteration, message_count
+                )));
+            }
+            AgentLoopProgress::CheckpointSaved { iteration } => {
+                // Silent - don't spam the chat with checkpoint messages
+                // Could show in status bar if needed
+                self.status_message = Some(format!("Checkpoint saved (iteration {})", iteration));
+            }
+        }
+    }
+
+    /// Handle tool confirmation request from agentic loop.
+    fn handle_agent_tool_confirmation(
+        &mut self,
+        tool_name: String,
+        args: serde_json::Value,
+        request_id: String,
+    ) {
+        self.agent_state = AgentState::AgentLoopAwaitingConfirmation {
+            tool_name: tool_name.clone(),
+            request_id,
+        };
+
+        // Show confirmation prompt
+        let args_str = serde_json::to_string_pretty(&args).unwrap_or_default();
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "Agent wants to run tool: {}\nArgs: {}\n\nPress [y] to confirm, [n] to reject",
+            tool_name, args_str
+        )));
+        self.status_message = Some(format!("[y] Confirm {} | [n] Reject", tool_name));
+    }
+
+    /// Handle agentic loop completion.
+    fn handle_agent_loop_complete(&mut self, summary: String, files_changed: Vec<String>) {
+        self.is_streaming = false;
+        self.agent_state = AgentState::Complete;
+
+        // Display summary
+        let files_str = if files_changed.is_empty() {
+            "No files changed".to_string()
+        } else {
+            files_changed
+                .iter()
+                .map(|f| format!("  - {}", f))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        self.chat_messages_mut()
+            .push(ChatMessage::assistant(format!(
+                "=== Task Complete ===\n\n{}\n\nFiles changed:\n{}",
+                summary, files_str
+            )));
+
+        self.set_progress_status(0, ProgressStatus::Complete);
+        self.status_message = Some("Agent complete!".to_string());
+    }
+
+    /// Confirm or reject a tool execution in the agentic loop.
+    fn confirm_agent_tool(&mut self, confirmed: bool) {
+        // Only process if in the right state
+        if let AgentState::AgentLoopAwaitingConfirmation {
+            tool_name,
+            request_id,
+        } = std::mem::replace(&mut self.agent_state, AgentState::Idle)
+        {
+            // Send confirmation through channel
+            if let Some(ref tx) = self.agent_loop_confirmation_tx {
+                let confirmation = ToolConfirmation {
+                    request_id: request_id.clone(),
+                    confirmed,
+                };
+                let _ = tx.send(confirmation);
+            }
+
+            // Update state back to running
+            self.agent_state = AgentState::AgentLoopRunning {
+                current_action: if confirmed {
+                    format!("Executing {}...", tool_name)
+                } else {
+                    "Tool rejected, continuing...".to_string()
+                },
+            };
+
+            // Update UI
+            let msg = if confirmed {
+                format!("Confirmed: {}", tool_name)
+            } else {
+                format!("Rejected: {}", tool_name)
+            };
+            self.chat_messages_mut().push(ChatMessage::user(msg));
+            self.status_message = None;
+        }
+    }
+
+    /// Rollback all changes made by the agent loop.
+    fn rollback_agent_changes(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
+        if self.agent_backed_up_files.is_empty() {
+            self.chat_messages_mut().push(ChatMessage::system(
+                "No changes to rollback - no backups available.",
+            ));
+            return;
+        }
+
+        let root = self.config.storage.project_root.clone().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
+        let backed_up = std::mem::take(&mut self.agent_backed_up_files);
+
+        self.chat_messages_mut().push(ChatMessage::system(format!(
+            "Rolling back {} file(s)...",
+            backed_up.len()
+        )));
+
+        // Perform rollback using the arq_core function
+        match arq_core::agent::tools::rollback_all_files(&root, &backed_up) {
+            Ok((count, files)) => {
+                let _ = event_tx.send(Event::FilesRolledBack { count, files });
+            }
+            Err(e) => {
+                // Restore the backed_up_files since rollback failed
+                self.agent_backed_up_files = backed_up;
+                let _ = event_tx.send(Event::RollbackFailed(e));
             }
         }
     }
@@ -1446,6 +1720,21 @@ impl App {
                     self.discard_agent_changes();
                 }
             }
+            KeyCode::Char('y') => {
+                // Confirm tool execution in agentic loop
+                self.confirm_agent_tool(true);
+            }
+            KeyCode::Char('n') => {
+                // Reject tool execution in agentic loop
+                self.confirm_agent_tool(false);
+            }
+            KeyCode::Char('U') => {
+                // Rollback all changes (uppercase U to avoid conflict with scroll)
+                if self.selected_tab == SelectedTab::Agent && !self.agent_backed_up_files.is_empty()
+                {
+                    self.rollback_agent_changes(event_tx.clone());
+                }
+            }
             KeyCode::Char('m') => {
                 // Cycle through available models
                 self.cycle_model();
@@ -1534,8 +1823,8 @@ impl App {
             SelectedTab::Agent => {
                 match &self.agent_state {
                     AgentState::Idle => {
-                        // Start agent execution
-                        self.start_agent(event_tx);
+                        // Start the new agentic loop
+                        self.start_agent_loop(event_tx);
                     }
                     AgentState::AwaitingReview { .. } => {
                         // User typed feedback - treat as skip for now
@@ -1918,8 +2207,8 @@ impl App {
         });
     }
 
-    /// Start agent execution from the approved plan.
-    fn start_agent(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
+    /// Start the agentic loop from the approved plan.
+    fn start_agent_loop(&mut self, event_tx: mpsc::UnboundedSender<Event>) {
         // Get current task and plan
         let task = match &self.current_task {
             Some(t) => t.clone(),
@@ -1940,51 +2229,133 @@ impl App {
             }
         };
 
-        let task_id = task.id.clone();
-
         self.is_streaming = true;
         self.stream_buffer.clear();
         self.reset_progress_items();
 
-        let total_items = plan.files_to_create.len() + plan.files_to_modify.len();
+        // Set up confirmation channel
+        let (confirmation_tx, confirmation_rx) = mpsc::unbounded_channel();
+        self.agent_loop_confirmation_tx = Some(confirmation_tx);
 
-        if total_items == 0 {
-            self.chat_messages_mut()
-                .push(ChatMessage::system("No items in plan to execute."));
-            self.agent_state = AgentState::Idle;
-            return;
-        }
-
-        self.agent_state = AgentState::Generating;
-        self.status_message = Some(format!("Generating item 1/{}...", total_items));
+        // Update state
+        self.agent_state = AgentState::AgentLoopRunning {
+            current_action: "Starting...".to_string(),
+        };
+        self.status_message = Some("Agent loop starting...".to_string());
 
         // Display plan summary
+        let files_to_create = plan.files_to_create.len();
+        let files_to_modify = plan.files_to_modify.len();
         self.chat_messages_mut().push(ChatMessage::system(format!(
-            "Starting agent execution with {} items to process...\n\
-             Review each item: [a] accept, [s] skip, [r] regenerate",
-            total_items
+            "Starting agentic loop...\n\
+             Files to create: {}\n\
+             Files to modify: {}\n\n\
+             The agent will request confirmation for file writes and commands.\n\
+             Press [y] to confirm, [n] to reject.",
+            files_to_create, files_to_modify
         )));
 
         let config = self.config.clone();
 
-        // Spawn task to generate first item
+        // Spawn the agentic loop
         tokio::spawn(async move {
-            match run_single_agent_item(
-                plan,
-                config,
-                task_id.clone(),
-                0, // first item
-                total_items,
-                Vec::new(), // no accepted results yet
-                event_tx.clone(),
-            )
-            .await
-            {
-                Ok(generated) => {
-                    let _ = event_tx.send(Event::AgentGenerated(generated));
+            // Get the project root (use current directory for now)
+            let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+            // Create LLM client based on provider
+            let model = config.llm.model_or_default();
+            let max_tokens = config.llm.max_tokens;
+            let provider = config.llm.provider.as_str();
+
+            let llm: Box<dyn arq_core::llm::LLMWithTools> = match provider {
+                "claude" | "anthropic" => {
+                    // Claude doesn't support tool calling in LLMWithTools yet
+                    // Fall back to OpenAI-compatible for now
+                    let base_url = config.llm.base_url_or_default();
+                    let api_key = config.llm.api_key_or_env().unwrap_or_default();
+                    Box::new(
+                        arq_core::OpenAIClient::new(&base_url, &api_key, &model)
+                            .with_max_tokens(max_tokens),
+                    )
                 }
-                Err(error) => {
-                    let _ = event_tx.send(Event::AgentFailed(error));
+                "ollama" => {
+                    let base_url = config.llm.base_url_or_default();
+                    Box::new(
+                        arq_core::OpenAIClient::new(&base_url, "", &model)
+                            .with_max_tokens(max_tokens),
+                    )
+                }
+                _ => {
+                    // OpenAI or OpenAI-compatible
+                    let base_url = config.llm.base_url_or_default();
+                    let api_key = config.llm.api_key_or_env().unwrap_or_default();
+                    Box::new(
+                        arq_core::OpenAIClient::new(&base_url, &api_key, &model)
+                            .with_max_tokens(max_tokens),
+                    )
+                }
+            };
+
+            // Create and configure the runner
+            let loop_config = AgentLoopConfig {
+                max_iterations: 50,
+                auto_confirm: false,
+                dry_run: false,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                max_context_messages: 50,
+            };
+
+            let mut runner: AgentLoopRunner<arq_core::FileStorage> =
+                AgentLoopRunner::with_config(llm, root, loop_config);
+
+            // Create progress channel
+            let (progress_tx, mut progress_rx) = mpsc::unbounded_channel();
+
+            // Forward progress events to main event loop
+            let event_tx_clone = event_tx.clone();
+            tokio::spawn(async move {
+                while let Some(progress) = progress_rx.recv().await {
+                    match &progress {
+                        AgentLoopProgress::AwaitingConfirmation {
+                            tool_name,
+                            args,
+                            request_id,
+                        } => {
+                            // Send as special confirmation event
+                            let _ = event_tx_clone.send(Event::AgentToolConfirmation {
+                                tool_name: tool_name.clone(),
+                                args: args.clone(),
+                                request_id: request_id.clone(),
+                            });
+                        }
+                        AgentLoopProgress::Complete {
+                            summary,
+                            files_changed,
+                        } => {
+                            let _ = event_tx_clone.send(Event::AgentLoopComplete {
+                                summary: summary.clone(),
+                                files_changed: files_changed.clone(),
+                            });
+                        }
+                        _ => {
+                            let _ = event_tx_clone.send(Event::AgentLoop(progress));
+                        }
+                    }
+                }
+            });
+
+            // Run the loop
+            match runner.run(&plan, progress_tx, confirmation_rx).await {
+                Ok(state) => {
+                    if state.is_complete {
+                        // Success handled by Complete progress event
+                    } else if let Some(error) = state.error {
+                        let _ = event_tx.send(Event::AgentFailed(error));
+                    }
+                }
+                Err(e) => {
+                    let _ = event_tx.send(Event::AgentFailed(e.to_string()));
                 }
             }
         });

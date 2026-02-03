@@ -6,8 +6,8 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use arq_core::{
-    AgentProgress, ApproachOptions, ExecutionSummary, GeneratedCode, Plan, PlanningProgress,
-    ResearchDoc, ResearchProgress,
+    AgentLoopProgress, AgentProgress, ApproachOptions, ExecutionSummary, GeneratedCode, Plan,
+    PlanningProgress, ResearchDoc, ResearchProgress,
 };
 
 /// Result of a completed research task.
@@ -94,6 +94,23 @@ pub enum Event {
     AgentComplete(AgentCompleteResult),
     /// Agent execution failed
     AgentFailed(String),
+    /// Agent agentic loop progress update
+    AgentLoop(AgentLoopProgress),
+    /// Agent loop requests tool confirmation
+    AgentToolConfirmation {
+        tool_name: String,
+        args: serde_json::Value,
+        request_id: String,
+    },
+    /// Agent loop completed successfully
+    AgentLoopComplete {
+        summary: String,
+        files_changed: Vec<String>,
+    },
+    /// Files were successfully rolled back
+    FilesRolledBack { count: usize, files: Vec<String> },
+    /// Rollback failed with error message
+    RollbackFailed(String),
 }
 
 /// Handles events from various sources.

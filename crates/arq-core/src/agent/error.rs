@@ -52,4 +52,8 @@ pub enum AgentError {
     /// Filesystem operation error.
     #[error("Filesystem error for '{path}': {message}")]
     FileSystemError { path: String, message: String },
+
+    /// Execution failed with error message.
+    #[error("Execution failed: {0}")]
+    ExecutionFailed(String),
 }

@@ -11,8 +11,9 @@ pub mod storage;
 pub mod task;
 
 pub use agent::{
-    AgentError, AgentExecutor, AgentProgress, ChangeApplier, CodeGenerator, ConformanceChecker,
-    DiffGenerator, ExecutionSummary, FileOperation, GeneratedCode,
+    AgentError, AgentExecutor, AgentLoopConfig, AgentLoopProgress, AgentLoopRunner, AgentLoopState,
+    AgentProgress, ChangeApplier, CodeGenerator, ConformanceChecker, DiffGenerator,
+    ExecutionSummary, FileOperation, GeneratedCode, ToolConfirmation,
 };
 pub use config::{
     Config, ConfigError, ContextConfig, KnowledgeConfig, LLMConfig, ResearchConfig, StorageConfig,

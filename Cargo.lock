@@ -273,6 +273,7 @@ dependencies = [
  "dirs 5.0.1",
  "fastembed",
  "futures",
+ "glob",
  "hex",
  "ignore",
  "proc-macro2",

@@ -1,13 +1,28 @@
 use std::fs;
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
+
+use crate::agent::AgentLoopState;
 use crate::config::{StorageConfig, DEFAULT_CURRENT_FILE};
+use crate::llm::Message;
 use crate::planning::Plan;
 use crate::research::ResearchDoc;
 use crate::task::{Task, TaskSummary};
 
 use super::error::StorageError;
 use super::Storage;
+
+/// Session data persisted for agent loop resumption.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AgentSessionData {
+    /// The agent loop state.
+    state: AgentLoopState,
+    /// Conversation history.
+    messages: Vec<Message>,
+    /// Timestamp when saved.
+    saved_at: chrono::DateTime<chrono::Utc>,
+}
 
 /// File-based storage implementation.
 ///
@@ -109,6 +124,21 @@ impl FileStorage {
             fs::create_dir_all(&dir).map_err(|e| StorageError::io(&dir, e))?;
         }
         Ok(())
+    }
+
+    /// Returns the path to an agent session file for a task.
+    fn agent_session_file(&self, task_id: &str) -> PathBuf {
+        self.task_dir(task_id).join("agent-session.json")
+    }
+
+    /// Returns the path to the project memory file (.arq/MEMORY.md).
+    fn project_memory_file(&self) -> PathBuf {
+        self.local_arq_dir().join("MEMORY.md")
+    }
+
+    /// Returns the path to a task's memory file.
+    fn task_memory_file(&self, task_id: &str) -> PathBuf {
+        self.task_dir(task_id).join("memory.md")
     }
 }
 
@@ -241,6 +271,108 @@ impl Storage for FileStorage {
                 }
             }
         }
+
+        Ok(())
+    }
+
+    fn save_agent_session(
+        &self,
+        task_id: &str,
+        state: &AgentLoopState,
+        messages: &[Message],
+    ) -> Result<(), StorageError> {
+        self.ensure_task_dir(task_id)?;
+
+        let session = AgentSessionData {
+            state: state.clone(),
+            messages: messages.to_vec(),
+            saved_at: chrono::Utc::now(),
+        };
+
+        let path = self.agent_session_file(task_id);
+        let json = serde_json::to_string_pretty(&session)?;
+        fs::write(&path, json).map_err(|e| StorageError::io(&path, e))?;
+
+        Ok(())
+    }
+
+    fn load_agent_session(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<(AgentLoopState, Vec<Message>)>, StorageError> {
+        let path = self.agent_session_file(task_id);
+
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let json = fs::read_to_string(&path).map_err(|e| StorageError::io(&path, e))?;
+        let session: AgentSessionData = serde_json::from_str(&json)?;
+
+        Ok(Some((session.state, session.messages)))
+    }
+
+    fn clear_agent_session(&self, task_id: &str) -> Result<(), StorageError> {
+        let path = self.agent_session_file(task_id);
+
+        if path.exists() {
+            fs::remove_file(&path).map_err(|e| StorageError::io(&path, e))?;
+        }
+
+        Ok(())
+    }
+
+    fn has_agent_session(&self, task_id: &str) -> Result<bool, StorageError> {
+        let path = self.agent_session_file(task_id);
+        Ok(path.exists())
+    }
+
+    fn load_project_memory(&self) -> Result<Option<String>, StorageError> {
+        let path = self.project_memory_file();
+
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let content = fs::read_to_string(&path).map_err(|e| StorageError::io(&path, e))?;
+
+        if content.trim().is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(content))
+        }
+    }
+
+    fn save_project_memory(&self, memory: &str) -> Result<(), StorageError> {
+        self.ensure_local_arq_dir()?;
+
+        let path = self.project_memory_file();
+        fs::write(&path, memory).map_err(|e| StorageError::io(&path, e))?;
+
+        Ok(())
+    }
+
+    fn load_task_memory(&self, task_id: &str) -> Result<Option<String>, StorageError> {
+        let path = self.task_memory_file(task_id);
+
+        if !path.exists() {
+            return Ok(None);
+        }
+
+        let content = fs::read_to_string(&path).map_err(|e| StorageError::io(&path, e))?;
+
+        if content.trim().is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(content))
+        }
+    }
+
+    fn save_task_memory(&self, task_id: &str, memory: &str) -> Result<(), StorageError> {
+        self.ensure_task_dir(task_id)?;
+
+        let path = self.task_memory_file(task_id);
+        fs::write(&path, memory).map_err(|e| StorageError::io(&path, e))?;
 
         Ok(())
     }

@@ -2,11 +2,15 @@ mod claude;
 mod error;
 mod openai;
 mod provider;
+mod tool_call;
 
 pub use claude::ClaudeClient;
 pub use error::LLMError;
 pub use openai::OpenAIClient;
 pub use provider::Provider;
+pub use tool_call::{
+    LLMToolResponse, LLMWithTools, Message, MessageContent, MessageRole, ToolCall,
+};
 
 use async_trait::async_trait;
 use tokio::sync::mpsc;
