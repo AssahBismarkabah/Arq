@@ -8,42 +8,58 @@ use ratatui::{
 use crate::tui::app::{App, MessageRole, PlanningState, ResearchState};
 use crate::tui::highlight::{highlight_markdown, Highlighter};
 
-/// Wrap text to fit within a given width.
+/// Wrap text to fit within a given width (character-aware for UTF-8).
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
 
     for line in text.lines() {
-        if line.len() <= width {
+        let char_count = line.chars().count();
+        if char_count <= width {
             lines.push(line.to_string());
         } else {
             // Word wrap long lines
             let mut current_line = String::new();
+            let mut current_len = 0;
+
             for word in line.split_whitespace() {
+                let word_len = word.chars().count();
                 let test_len = if current_line.is_empty() {
-                    word.len()
+                    word_len
                 } else {
-                    current_line.len() + 1 + word.len()
+                    current_len + 1 + word_len
                 };
 
                 if test_len <= width {
                     if !current_line.is_empty() {
                         current_line.push(' ');
+                        current_len += 1;
                     }
                     current_line.push_str(word);
+                    current_len += word_len;
                 } else {
                     if !current_line.is_empty() {
                         lines.push(current_line);
+                        current_line = String::new();
+                        current_len = 0;
                     }
-                    // Handle words longer than width
-                    if word.len() > width {
-                        let mut remaining = word;
-                        while remaining.len() > width {
-                            lines.push(remaining[..width].to_string());
-                            remaining = &remaining[width..];
+                    // Handle words longer than width - split by characters
+                    if word_len > width {
+                        let chars: Vec<char> = word.chars().collect();
+                        let mut i = 0;
+                        while i < chars.len() {
+                            let end = (i + width).min(chars.len());
+                            let chunk: String = chars[i..end].iter().collect();
+                            if end < chars.len() {
+                                lines.push(chunk);
+                            } else {
+                                current_line = chunk;
+                                current_len = end - i;
+                            }
+                            i = end;
                         }
-                        current_line = remaining.to_string();
                     } else {
                         current_line = word.to_string();
+                        current_len = word_len;
                     }
                 }
             }

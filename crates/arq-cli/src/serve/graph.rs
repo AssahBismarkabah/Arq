@@ -317,9 +317,11 @@ impl GraphBuilder {
         // Take the last segment if it's a path (e.g., "std::fmt::Display" -> "Display")
         let name = name.rsplit("::").next().unwrap_or(name);
 
-        // Limit length
-        if name.len() > 30 {
-            format!("{}...", &name[..27])
+        // Limit length (character-aware for UTF-8)
+        let char_count = name.chars().count();
+        if char_count > 30 {
+            let truncated: String = name.chars().take(27).collect();
+            format!("{}...", truncated)
         } else {
             name.to_string()
         }
