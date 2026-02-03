@@ -164,7 +164,7 @@ pub fn render(app: &App, frame: &mut Frame, area: Rect) {
     // Add streaming buffer if active (but not during research/planning which shows raw JSON)
     let is_research_or_planning = matches!(
         app.research_state,
-        ResearchState::Researching | ResearchState::Refining { .. }
+        ResearchState::Researching | ResearchState::Refining
     ) || matches!(
         app.planning_state,
         PlanningState::GeneratingApproaches | PlanningState::GeneratingPlan { .. }

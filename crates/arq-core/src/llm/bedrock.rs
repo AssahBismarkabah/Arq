@@ -522,15 +522,13 @@ impl LLMWithTools for BedrockClient {
                     }
                 }
                 ConverseStreamOutput::ContentBlockStart(start) => {
-                    if let Some(s) = start.start() {
-                        if let aws_sdk_bedrockruntime::types::ContentBlockStart::ToolUse(
-                            tool_start,
-                        ) = s
-                        {
-                            current_tool_id = tool_start.tool_use_id().to_string();
-                            current_tool_name = tool_start.name().to_string();
-                            current_tool_input.clear();
-                        }
+                    if let Some(aws_sdk_bedrockruntime::types::ContentBlockStart::ToolUse(
+                        tool_start,
+                    )) = start.start()
+                    {
+                        current_tool_id = tool_start.tool_use_id().to_string();
+                        current_tool_name = tool_start.name().to_string();
+                        current_tool_input.clear();
                     }
                 }
                 ConverseStreamOutput::ContentBlockStop(_) => {

@@ -227,13 +227,13 @@ fn generate_hint(content: &str, search: &str) -> String {
 
     // Check if trimmed version exists
     if content.contains(trimmed_search) && trimmed_search != search {
-        return format!("\n  Hint: The trimmed text was found. Check leading/trailing whitespace.");
+        return "\n  Hint: The trimmed text was found. Check leading/trailing whitespace.".to_string();
     }
 
     // Check for line ending issues
     let normalized_search = search.replace("\r\n", "\n");
     if content.contains(&normalized_search) && normalized_search != search {
-        return format!("\n  Hint: Try using Unix-style line endings (\\n instead of \\r\\n).");
+        return "\n  Hint: Try using Unix-style line endings (\\n instead of \\r\\n).".to_string();
     }
 
     // Try to find similar text
@@ -339,7 +339,7 @@ fn create_unified_diff(old: &str, new: &str, path: &str) -> String {
                 // Lines differ
                 if !in_hunk {
                     in_hunk = true;
-                    hunk_lines.extend(context_buffer.drain(..));
+                    hunk_lines.append(&mut context_buffer);
                 }
                 hunk_lines.push(format!("-{}", o));
                 hunk_lines.push(format!("+{}", n));
@@ -350,7 +350,7 @@ fn create_unified_diff(old: &str, new: &str, path: &str) -> String {
                 // Old line deleted
                 if !in_hunk {
                     in_hunk = true;
-                    hunk_lines.extend(context_buffer.drain(..));
+                    hunk_lines.append(&mut context_buffer);
                 }
                 hunk_lines.push(format!("-{}", o));
                 old_idx += 1;
@@ -359,7 +359,7 @@ fn create_unified_diff(old: &str, new: &str, path: &str) -> String {
                 // New line added
                 if !in_hunk {
                     in_hunk = true;
-                    hunk_lines.extend(context_buffer.drain(..));
+                    hunk_lines.append(&mut context_buffer);
                 }
                 hunk_lines.push(format!("+{}", n));
                 new_idx += 1;

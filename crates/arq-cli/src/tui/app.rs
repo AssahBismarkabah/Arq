@@ -492,7 +492,7 @@ impl App {
                         // that display formatted output instead of raw JSON
                         let is_research_or_planning = matches!(
                             self.research_state,
-                            ResearchState::Researching | ResearchState::Refining { .. }
+                            ResearchState::Researching | ResearchState::Refining
                         ) || matches!(
                             self.planning_state,
                             PlanningState::GeneratingApproaches

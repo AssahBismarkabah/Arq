@@ -79,7 +79,7 @@ impl Tool for ReadFileTool {
                 content
                     .lines()
                     .enumerate()
-                    .filter(|(i, _)| *i + 1 >= start && *i + 1 <= end)
+                    .filter(|(i, _)| *i + 1 >= start && *i < end)
                     .map(|(i, line)| format!("{:4} | {}", i + 1, line))
                     .collect::<Vec<_>>()
                     .join("\n")
@@ -100,7 +100,7 @@ impl Tool for ReadFileTool {
             (None, Some(end)) => content
                 .lines()
                 .enumerate()
-                .filter(|(i, _)| *i + 1 <= end)
+                .filter(|(i, _)| *i < end)
                 .map(|(i, line)| format!("{:4} | {}", i + 1, line))
                 .collect::<Vec<_>>()
                 .join("\n"),

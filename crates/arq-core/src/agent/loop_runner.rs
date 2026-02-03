@@ -49,7 +49,7 @@ impl Default for AgentLoopConfig {
 }
 
 /// State of the agentic loop.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentLoopState {
     /// Current iteration count.
     pub iteration: usize,
@@ -65,20 +65,6 @@ pub struct AgentLoopState {
     pub error: Option<String>,
     /// Total retries used.
     pub total_retries: usize,
-}
-
-impl Default for AgentLoopState {
-    fn default() -> Self {
-        Self {
-            iteration: 0,
-            modified_files: Vec::new(),
-            backed_up_files: Vec::new(),
-            is_complete: false,
-            summary: None,
-            error: None,
-            total_retries: 0,
-        }
-    }
 }
 
 /// Progress events from the agent loop.
@@ -857,7 +843,7 @@ impl<S: Storage> AgentLoopRunner<S> {
         }
 
         rollback_all_files(&self.context.root, &state.backed_up_files)
-            .map_err(|e| AgentError::ExecutionFailed(e))
+            .map_err(AgentError::ExecutionFailed)
     }
 
     /// Build a nudge message when the LLM seems stuck.
