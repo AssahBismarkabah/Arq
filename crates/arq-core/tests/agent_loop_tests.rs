@@ -587,7 +587,7 @@ async fn test_read_only_tools_marked_correctly() {
     for tool_name in read_only {
         let tool = registry
             .get(tool_name)
-            .expect(&format!("Tool {} not found", tool_name));
+            .unwrap_or_else(|| panic!("Tool {} not found", tool_name));
         assert!(
             tool.is_read_only(),
             "Tool '{}' should be read-only",
@@ -608,7 +608,7 @@ async fn test_read_only_tools_marked_correctly() {
     for tool_name in write_tools {
         let tool = registry
             .get(tool_name)
-            .expect(&format!("Tool {} not found", tool_name));
+            .unwrap_or_else(|| panic!("Tool {} not found", tool_name));
         assert!(
             !tool.is_read_only(),
             "Tool '{}' should NOT be read-only",
