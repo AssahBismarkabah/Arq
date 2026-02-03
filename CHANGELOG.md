@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-03
+
 ### Added
 
+- **AWS Bedrock Support**: Native integration with AWS Bedrock for Claude models
+  - Uses the Bedrock Converse API for unified tool calling support
+  - Automatic AWS credential chain (environment variables, ~/.aws/credentials, IAM roles)
+  - Configure with `provider = "bedrock"` in arq.toml
+  - Supports Claude Opus 4.5, Claude 3.5 Sonnet, and other Bedrock models
 - **Planning Phase (TUI)**: Full implementation of the second phase in the Researcher → Planner → Agent workflow
   - Generate 2-3 implementation approaches with trade-offs from research findings
   - Select an approach or describe a custom one
@@ -17,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`arq tui --continue`**: Restore previous session state when reopening TUI
 - **Per-tab chat history**: Each tab (Researcher, Planner, Agent) maintains its own messages and scroll position
 - **Planning progress indicators**: Visual feedback during approach generation and plan creation
-- **Syntax highlighting in chat**:  code highlighting using `syntect` library with support for 100+ languages
+- **Syntax highlighting in chat**: Code highlighting using `syntect` library with support for 100+ languages
+- **Agent Tool System**: Modular tools for file, command, and Git operations
 
 ### Changed
 
@@ -25,12 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Planning prompts now include inline JSON format instructions for better provider compatibility
 - Auto-advance task phase when saving plan (Research → Planning)
 - **Faster scrolling**: j/k now scroll 3 lines, added Page Up/Down (Ctrl+u/d), Home/End (g/G) for navigation
+- Improved string handling with character-aware truncation and UTF-8 support
+- Adjusted default LLM token limits for better performance
 
 ### Fixed
 
 - "Wrong phase: expected Planning, got Research" error when saving plans
 - Tab state isolation - switching tabs no longer shows wrong content
 - Progress indicators now properly update to complete state
+- TUI task state synchronization with CLI operations
+- Clippy warnings for Rust 1.93.0 compatibility
 
 ## [0.2.1] - 2025-01-31
 
@@ -75,7 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - @AssahBismarkabah
 
-[Unreleased]: https://github.com/AssahBismarkabah/Arq/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/AssahBismarkabah/Arq/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/AssahBismarkabah/Arq/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/AssahBismarkabah/Arq/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/AssahBismarkabah/Arq/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AssahBismarkabah/Arq/releases/tag/v0.1.0
