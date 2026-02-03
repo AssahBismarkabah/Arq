@@ -22,7 +22,7 @@ pub use context::{Context, ContextBuilder, ContextError};
 pub use knowledge::{
     IndexProgress, IndexStats, KnowledgeError, KnowledgeGraph, KnowledgeStore, SearchResult,
 };
-pub use llm::{ClaudeClient, LLMError, OpenAIClient, Provider, StreamChunk, LLM};
+pub use llm::{BedrockClient, ClaudeClient, LLMError, OpenAIClient, Provider, StreamChunk, LLM};
 pub use manager::{ManagerError, TaskManager};
 pub use phase::Phase;
 pub use planning::{

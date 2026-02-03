@@ -36,13 +36,17 @@ impl BedrockClient {
     /// 3. AWS config file (~/.aws/config)
     /// 4. IAM instance roles (EC2, ECS, Lambda)
     pub async fn new(region: Option<String>, model_id: String) -> Result<Self, LLMError> {
-        let mut config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
+        // Load AWS configuration
+        let config = if let Some(ref r) = region {
+            aws_config::defaults(aws_config::BehaviorVersion::latest())
+                .region(aws_config::Region::new(r.clone()))
+                .load()
+                .await
+        } else {
+            aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await
+        };
 
-        if let Some(ref r) = region {
-            config_loader = config_loader.region(aws_config::Region::new(r.clone()));
-        }
-
-        let config = config_loader.load().await;
+        // Create the Bedrock client
         let client = Client::new(&config);
 
         Ok(Self {
@@ -349,7 +353,9 @@ impl LLM for BedrockClient {
     }
 
     fn supports_streaming(&self) -> bool {
-        true
+        // Disable streaming for now due to AWS SDK builder issues
+        // The non-streaming converse API works reliably
+        false
     }
 }
 
@@ -366,6 +372,13 @@ impl LLMWithTools for BedrockClient {
             .iter()
             .filter_map(|m| self.message_to_bedrock(m))
             .collect();
+
+        // Bedrock requires at least one message
+        if bedrock_messages.is_empty() {
+            return Err(LLMError::RequestFailed(
+                "No valid messages to send to Bedrock".to_string(),
+            ));
+        }
 
         let inference_config = InferenceConfiguration::builder()
             .max_tokens(self.max_tokens)
@@ -390,19 +403,19 @@ impl LLMWithTools for BedrockClient {
                 let tool_config = ToolConfiguration::builder()
                     .set_tools(Some(bedrock_tools))
                     .build()
-                    .map_err(|e| LLMError::RequestFailed(e.to_string()))?;
+                    .map_err(|e| LLMError::RequestFailed(format!("Tool config error: {}", e)))?;
                 request = request.tool_config(tool_config);
             }
         }
 
         let result = request.send().await.map_err(|e| {
-            let err_msg = e.to_string();
+            let err_msg = format!("{:?}", e);
             if err_msg.contains("AccessDenied") || err_msg.contains("credentials") {
                 LLMError::MissingApiKey
             } else if err_msg.contains("ThrottlingException") {
                 LLMError::RateLimited
             } else {
-                LLMError::RequestFailed(err_msg)
+                LLMError::RequestFailed(format!("Bedrock API error: {}", err_msg))
             }
         })?;
 
@@ -560,6 +573,8 @@ impl LLMWithTools for BedrockClient {
     }
 
     fn supports_streaming(&self) -> bool {
-        true
+        // Disable streaming for now due to AWS SDK builder issues
+        // The non-streaming converse API works reliably
+        false
     }
 }

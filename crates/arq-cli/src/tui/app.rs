@@ -1279,19 +1279,40 @@ impl App {
 
     /// Approve plan and save - called when user presses 'a' during approval.
     fn approve_plan(&mut self, task_id: String, plan: Plan) {
+        // Reload task from disk to get current state (may have been modified by CLI)
+        let current_phase = match self.manager.get_task(&task_id) {
+            Ok(task) => {
+                self.current_task = Some(task.clone());
+                task.phase
+            }
+            Err(e) => {
+                self.chat_messages_mut().push(ChatMessage::system(format!(
+                    "Failed to load task: {}",
+                    e
+                )));
+                return;
+            }
+        };
+
         // Auto-advance to Planning phase if still in Research phase
-        if let Some(ref task) = self.current_task {
-            if task.phase == arq_core::Phase::Research && task.research_doc.is_some() {
-                if let Err(e) = self.manager.advance_phase(&task_id) {
-                    self.chat_messages_mut().push(ChatMessage::system(format!(
-                        "Failed to advance to Planning phase: {}",
-                        e
-                    )));
-                    self.planning_state = PlanningState::AwaitingApproval {
-                        task_id,
-                        pending_plan: plan,
-                    };
-                    return;
+        if current_phase == arq_core::Phase::Research {
+            if let Some(ref task) = self.current_task {
+                if task.research_doc.is_some() {
+                    if let Err(e) = self.manager.advance_phase(&task_id) {
+                        self.chat_messages_mut().push(ChatMessage::system(format!(
+                            "Failed to advance to Planning phase: {}",
+                            e
+                        )));
+                        self.planning_state = PlanningState::AwaitingApproval {
+                            task_id,
+                            pending_plan: plan,
+                        };
+                        return;
+                    }
+                    // Reload task after advancing
+                    if let Ok(task) = self.manager.get_task(&task_id) {
+                        self.current_task = Some(task);
+                    }
                 }
             }
         }
@@ -2336,6 +2357,20 @@ impl App {
                             .with_max_tokens(max_tokens),
                     )
                 }
+                "bedrock" | "aws" => {
+                    let region = config.llm.base_url.clone();
+                    match arq_core::BedrockClient::new(region, model.clone()).await {
+                        Ok(client) => Box::new(client.with_max_tokens(max_tokens as i32))
+                            as Box<dyn arq_core::llm::LLMWithTools>,
+                        Err(e) => {
+                            let _ = event_tx.send(Event::AgentFailed(format!(
+                                "Failed to create Bedrock client: {}",
+                                e
+                            )));
+                            return;
+                        }
+                    }
+                }
                 "ollama" => {
                     let base_url = config.llm.base_url_or_default();
                     Box::new(
@@ -2661,6 +2696,19 @@ async fn run_research_task(
                 .await
                 .map_err(|e| format!("Research failed: {}", e))?
         }
+        "bedrock" | "aws" => {
+            use arq_core::BedrockClient;
+            let region = config.llm.base_url.clone();
+            let client = BedrockClient::new(region, model)
+                .await
+                .map_err(|e| format!("Failed to create Bedrock client: {}", e))?
+                .with_max_tokens(max_tokens as i32);
+            let runner = create_runner!(client);
+            runner
+                .run_streaming(&task, progress_tx, stream_tx)
+                .await
+                .map_err(|e| format!("Research failed: {}", e))?
+        }
         "ollama" => {
             let base_url = config.llm.base_url_or_default();
             let client = OpenAIClient::new(&base_url, "", &model).with_max_tokens(max_tokens);
@@ -2727,6 +2775,19 @@ async fn run_planning_approaches(
                 .await
                 .map_err(|e| format!("Planning failed: {}", e))?
         }
+        "bedrock" | "aws" => {
+            use arq_core::BedrockClient;
+            let region = config.llm.base_url.clone();
+            let client = BedrockClient::new(region, model)
+                .await
+                .map_err(|e| format!("Failed to create Bedrock client: {}", e))?
+                .with_max_tokens(max_tokens as i32);
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_approaches(&research_doc)
+                .await
+                .map_err(|e| format!("Planning failed: {}", e))?
+        }
         "ollama" => {
             let base_url = config.llm.base_url_or_default();
             let client = OpenAIClient::new(&base_url, "", &model).with_max_tokens(max_tokens);
@@ -2786,6 +2847,19 @@ async fn run_planning_spec(
             if let Some(ref version) = config.llm.api_version {
                 client = client.with_api_version(version);
             }
+            let runner = PlanningRunner::new(client);
+            runner
+                .generate_plan(&research_doc, &approach)
+                .await
+                .map_err(|e| format!("Plan generation failed: {}", e))?
+        }
+        "bedrock" | "aws" => {
+            use arq_core::BedrockClient;
+            let region = config.llm.base_url.clone();
+            let client = BedrockClient::new(region, model)
+                .await
+                .map_err(|e| format!("Failed to create Bedrock client: {}", e))?
+                .with_max_tokens(max_tokens as i32);
             let runner = PlanningRunner::new(client);
             runner
                 .generate_plan(&research_doc, &approach)
@@ -2874,6 +2948,15 @@ async fn run_single_agent_item(
             if let Some(ref version) = config.llm.api_version {
                 client = client.with_api_version(version);
             }
+            Box::new(client)
+        }
+        "bedrock" | "aws" => {
+            use arq_core::BedrockClient;
+            let region = config.llm.base_url.clone();
+            let client = BedrockClient::new(region, model)
+                .await
+                .map_err(|e| format!("Failed to create Bedrock client: {}", e))?
+                .with_max_tokens(max_tokens as i32);
             Box::new(client)
         }
         "ollama" => {

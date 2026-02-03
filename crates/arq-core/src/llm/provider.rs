@@ -124,12 +124,12 @@ impl Provider {
 
                 let region = region.or_else(|| std::env::var("AWS_DEFAULT_REGION").ok());
 
-                // Use tokio runtime to create async client
-                let rt = tokio::runtime::Handle::try_current().map_err(|_| {
-                    LLMError::MissingConfig("Tokio runtime not available".to_string())
+                // Use block_in_place to safely block within an async context
+                // This moves the blocking call to a worker thread while keeping the async runtime running
+                let client = tokio::task::block_in_place(|| {
+                    let rt = tokio::runtime::Handle::current();
+                    rt.block_on(BedrockClient::new(region, model_id))
                 })?;
-
-                let client = rt.block_on(BedrockClient::new(region, model_id))?;
                 Ok(Box::new(client))
             }
         }
