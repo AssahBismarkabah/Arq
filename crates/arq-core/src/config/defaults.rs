@@ -158,8 +158,9 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
 pub const DEFAULT_LLM_PROVIDER: &str = "openai";
 
 /// Default max tokens for LLM responses.
-/// Set higher for code generation which can produce long outputs.
-pub const DEFAULT_MAX_TOKENS: u32 = 8192;
+/// Set to 4096 for compatibility with providers like DeepSeek that
+/// require streaming for higher values.
+pub const DEFAULT_MAX_TOKENS: u32 = 4096;
 
 // OpenAI defaults
 /// Default OpenAI API URL.

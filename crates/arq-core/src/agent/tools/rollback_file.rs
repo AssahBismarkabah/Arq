@@ -37,7 +37,7 @@ impl Tool for RollbackFileTool {
         };
 
         let full_path = context.root.join(path);
-        let backup_dir = context.root.join(".arq_backups");
+        let backup_dir = context.root.join(".arq").join("backups");
 
         // Check if backup directory exists
         if !backup_dir.exists() {
@@ -231,7 +231,7 @@ mod tests {
         let root = temp_dir.path();
 
         // Create backup directory
-        let backup_dir = root.join(".arq_backups");
+        let backup_dir = root.join(".arq").join("backups");
         std::fs::create_dir_all(&backup_dir).unwrap();
 
         // Create original file

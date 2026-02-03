@@ -992,7 +992,9 @@ impl App {
     fn handle_agent_loop_progress(&mut self, progress: AgentLoopProgress) {
         match progress {
             AgentLoopProgress::Started { plan_summary } => {
-                self.set_progress_status(0, ProgressStatus::InProgress);
+                // Loading plan complete, now generating code
+                self.set_progress_status(0, ProgressStatus::Complete);
+                self.set_progress_status(1, ProgressStatus::InProgress);
                 self.chat_messages_mut().push(ChatMessage::system(format!(
                     "Agent started: {}",
                     plan_summary
@@ -1146,7 +1148,10 @@ impl App {
                 summary, files_str
             )));
 
-        self.set_progress_status(0, ProgressStatus::Complete);
+        // Mark all progress items as complete
+        for i in 0..4 {
+            self.set_progress_status(i, ProgressStatus::Complete);
+        }
         self.status_message = Some("Agent complete!".to_string());
     }
 

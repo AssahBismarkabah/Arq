@@ -671,7 +671,7 @@ impl<S: Storage> AgentLoopRunner<S> {
             tool_name: tool_call.name.clone(),
             args_preview: truncate_string(
                 &serde_json::to_string_pretty(&tool_call.arguments).unwrap_or_default(),
-                300,
+                150,
             ),
         });
 
@@ -731,7 +731,7 @@ impl<S: Storage> AgentLoopRunner<S> {
             tool_name: tool_call.name.clone(),
             args_preview: truncate_string(
                 &serde_json::to_string_pretty(&tool_call.arguments).unwrap_or_default(),
-                300,
+                150,
             ),
         });
 
@@ -826,7 +826,8 @@ impl<S: Storage> AgentLoopRunner<S> {
             return None; // No backup needed for new files
         }
 
-        let backup_dir = self.context.root.join(".arq_backups");
+        // Store backups in .arq/backups/ (inside the gitignored .arq directory)
+        let backup_dir = self.context.root.join(".arq").join("backups");
         if std::fs::create_dir_all(&backup_dir).is_err() {
             return None;
         }
