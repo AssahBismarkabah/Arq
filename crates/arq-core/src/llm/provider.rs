@@ -1,4 +1,4 @@
-use super::{ClaudeClient, LLMError, OpenAIClient, LLM};
+use super::{BedrockClient, ClaudeClient, LLMError, OpenAIClient, DEFAULT_BEDROCK_MODEL, LLM};
 use crate::config::{
     LLMConfig, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL,
     DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_URL,
@@ -22,6 +22,13 @@ pub enum Provider {
     Ollama {
         base_url: Option<String>,
         model: String,
+    },
+    /// AWS Bedrock (Claude models via AWS)
+    Bedrock {
+        /// AWS region (e.g., "us-east-1")
+        region: Option<String>,
+        /// Model ID (e.g., "anthropic.claude-3-5-sonnet-20241022-v2:0")
+        model: Option<String>,
     },
 }
 
@@ -49,6 +56,11 @@ impl Provider {
                     .model
                     .clone()
                     .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string()),
+            },
+            "bedrock" | "aws" => Provider::Bedrock {
+                // Repurpose base_url as region for Bedrock
+                region: config.base_url.clone(),
+                model: config.model.clone(),
             },
             _ => Provider::OpenAI {
                 base_url: config.base_url.clone(),
@@ -104,6 +116,22 @@ impl Provider {
 
                 Ok(Box::new(OpenAIClient::new(base, "", model)))
             }
+
+            Provider::Bedrock { region, model } => {
+                let model_id = model
+                    .or_else(|| std::env::var("AWS_BEDROCK_MODEL").ok())
+                    .unwrap_or_else(|| DEFAULT_BEDROCK_MODEL.to_string());
+
+                let region = region.or_else(|| std::env::var("AWS_DEFAULT_REGION").ok());
+
+                // Use tokio runtime to create async client
+                let rt = tokio::runtime::Handle::try_current().map_err(|_| {
+                    LLMError::MissingConfig("Tokio runtime not available".to_string())
+                })?;
+
+                let client = rt.block_on(BedrockClient::new(region, model_id))?;
+                Ok(Box::new(client))
+            }
         }
     }
 
@@ -115,7 +143,8 @@ impl Provider {
     /// 3. ANTHROPIC_API_KEY set → Anthropic
     /// 4. OPENAI_API_KEY set → OpenAI
     /// 5. OLLAMA_HOST set → Ollama
-    /// 6. Default to OpenAI-compatible (works with local servers too)
+    /// 6. AWS_BEDROCK_MODEL set → AWS Bedrock
+    /// 7. Default to OpenAI-compatible (works with local servers too)
     pub fn from_env() -> Result<Box<dyn LLM>, LLMError> {
         // Check for explicit provider setting
         if let Ok(provider) = std::env::var("ARQ_LLM_PROVIDER") {
@@ -141,6 +170,11 @@ impl Provider {
                     }
                     .build()
                 }
+                "bedrock" | "aws" => Provider::Bedrock {
+                    region: None,
+                    model: None,
+                }
+                .build(),
                 other => Err(LLMError::UnknownProvider(other.to_string())),
             };
         }
@@ -179,6 +213,15 @@ impl Provider {
             return Provider::Ollama {
                 base_url: None,
                 model,
+            }
+            .build();
+        }
+
+        // Check for AWS Bedrock
+        if std::env::var("AWS_BEDROCK_MODEL").is_ok() {
+            return Provider::Bedrock {
+                region: None,
+                model: None,
             }
             .build();
         }

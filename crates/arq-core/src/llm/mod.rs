@@ -1,9 +1,11 @@
+mod bedrock;
 mod claude;
 mod error;
 mod openai;
 mod provider;
 mod tool_call;
 
+pub use bedrock::{BedrockClient, DEFAULT_BEDROCK_MODEL};
 pub use claude::ClaudeClient;
 pub use error::LLMError;
 pub use openai::OpenAIClient;

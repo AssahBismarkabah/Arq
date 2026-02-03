@@ -1117,13 +1117,66 @@ impl App {
             request_id,
         };
 
-        // Show confirmation prompt
-        let args_str = serde_json::to_string_pretty(&args).unwrap_or_default();
+        // Show confirmation prompt with truncated args for readability
+        let args_summary = Self::summarize_tool_args(&tool_name, &args);
         self.chat_messages_mut().push(ChatMessage::system(format!(
-            "Agent wants to run tool: {}\nArgs: {}\n\nPress [y] to confirm, [n] to reject",
-            tool_name, args_str
+            "Agent wants to run tool: {}\n{}\n\nPress [y] to confirm, [n] to reject",
+            tool_name, args_summary
         )));
         self.status_message = Some(format!("[y] Confirm {} | [n] Reject", tool_name));
+    }
+
+    /// Create a readable summary of tool arguments.
+    fn summarize_tool_args(tool_name: &str, args: &serde_json::Value) -> String {
+        match tool_name {
+            "edit_file" => {
+                let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                let search = args.get("search").and_then(|v| v.as_str()).unwrap_or("");
+                let replace = args.get("replace").and_then(|v| v.as_str()).unwrap_or("");
+                let search_preview = Self::truncate_for_display(search, 80);
+                let replace_preview = Self::truncate_for_display(replace, 80);
+                format!(
+                    "  path: {}\n  search: {}\n  replace: {}",
+                    path, search_preview, replace_preview
+                )
+            }
+            "write_file" => {
+                let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                let lines = content.lines().count();
+                format!("  path: {}\n  content: ({} lines)", path, lines)
+            }
+            "run_command" => {
+                let cmd = args.get("command").and_then(|v| v.as_str()).unwrap_or("?");
+                let cmd_preview = Self::truncate_for_display(cmd, 100);
+                format!("  command: {}", cmd_preview)
+            }
+            "read_file" => {
+                let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("?");
+                let start = args.get("start_line").and_then(|v| v.as_u64());
+                let end = args.get("end_line").and_then(|v| v.as_u64());
+                match (start, end) {
+                    (Some(s), Some(e)) => format!("  path: {} (lines {}-{})", path, s, e),
+                    _ => format!("  path: {}", path),
+                }
+            }
+            _ => {
+                // Generic: show truncated JSON
+                let json = serde_json::to_string_pretty(args).unwrap_or_default();
+                Self::truncate_for_display(&json, 200)
+            }
+        }
+    }
+
+    /// Truncate string for display with ellipsis.
+    fn truncate_for_display(s: &str, max_len: usize) -> String {
+        let chars: Vec<char> = s.chars().collect();
+        if chars.len() <= max_len {
+            s.replace('\n', "\\n")
+        } else {
+            let truncated: String = chars.into_iter().take(max_len).collect();
+            format!("{}...", truncated.replace('\n', "\\n"))
+        }
     }
 
     /// Handle agentic loop completion.

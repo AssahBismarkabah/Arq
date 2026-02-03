@@ -35,6 +35,11 @@ regex = "1.10"
 # Diff generation
 similar = "2.6"
 
+# AWS Bedrock
+aws-config = "1.5"
+aws-sdk-bedrockruntime = "1.60"
+aws-smithy-types = "1.2"
+
 # File system utilities
 glob = "0.3"
 
