@@ -1286,10 +1286,8 @@ impl App {
                 task.phase
             }
             Err(e) => {
-                self.chat_messages_mut().push(ChatMessage::system(format!(
-                    "Failed to load task: {}",
-                    e
-                )));
+                self.chat_messages_mut()
+                    .push(ChatMessage::system(format!("Failed to load task: {}", e)));
                 return;
             }
         };
