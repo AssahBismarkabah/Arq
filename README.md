@@ -49,17 +49,14 @@ brew install AssahBismarkabah/tap/arq
    ```
    *This indexes your codebase into the local knowledge graph.*
 
-3. **Start a new task**:
+3. **Launch the interactive TUI**:
    ```bash
-   arq new "Implement JWT authentication handler"
+   arq tui
    ```
 
-4. **Execute the workflow**:
-   ```bash
-   arq research  # Phase 1: Analyze codebase
-   arq advance   # Phase 2: Create execution plan
-   arq advance   # Phase 3: Generate code
-   ```
+<p align="center">
+  <img src="assets/arq.gif" alt="Arq TUI Demo" width="800">
+</p>
 
 ## Configuration
 
